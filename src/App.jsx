@@ -5,12 +5,12 @@ import {
   Briefcase, RefreshCw, WifiOff, LayoutDashboard, Menu,
   Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
   Eye, EyeOff, Filter, XCircle, Globe, Bold, Italic, Underline, List as ListIcon,
-  ArrowUp, ArrowDown // Thêm icon cho sort
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v2.9 - Column Sorting";
+const APP_VERSION = "v2.14";
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -44,6 +44,7 @@ const PO_FILES = {
         "no_account": "No account? Register now",
         "dashboard": "Dashboard",
         "list": "List",
+        "calendar": "Calendar",
         "settings": "Settings",
         "total_tasks": "Total Tasks",
         "completed": "Completed",
@@ -102,6 +103,8 @@ const PO_FILES = {
         "today": "Today",
         "tomorrow": "Tomorrow",
         "overdue_days": "Overdue {days} days",
+        "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        "month_names": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     },
     vi: {
         "app_name": "Quản Lý Công Việc",
@@ -125,6 +128,7 @@ const PO_FILES = {
         "no_account": "Chưa có tài khoản? Đăng ký ngay",
         "dashboard": "Bảng tin",
         "list": "Danh sách",
+        "calendar": "Lịch",
         "settings": "Cấu hình",
         "total_tasks": "Tổng số Task",
         "completed": "Hoàn thành",
@@ -183,6 +187,8 @@ const PO_FILES = {
         "today": "Hôm nay",
         "tomorrow": "Ngày mai",
         "overdue_days": "Quá hạn {days} ngày",
+        "weekdays": ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+        "month_names": ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"],
     }
 };
 
@@ -230,12 +236,8 @@ const getDaysRemaining = (dueDate, t) => {
 // --- RICH TEXT EDITOR COMPONENT ---
 const SimpleRichTextEditor = ({ initialValue, onChange }) => {
     const contentRef = useRef(null);
-
-    // Sync initial value only once or when it changes significantly (to avoid cursor jumping)
     useEffect(() => {
         if (contentRef.current && (contentRef.current.innerHTML === '' || initialValue !== contentRef.current.innerHTML)) {
-             // Only set if content is empty (init) or completely different (new task)
-             // This is a simple check; for production rich text, use a proper library.
              if (initialValue && initialValue !== contentRef.current.innerHTML) {
                  contentRef.current.innerHTML = initialValue;
              } else if (!initialValue) {
@@ -243,18 +245,8 @@ const SimpleRichTextEditor = ({ initialValue, onChange }) => {
              }
         }
     }, [initialValue]);
-
-    const handleInput = () => {
-        if (contentRef.current) {
-            onChange(contentRef.current.innerHTML);
-        }
-    };
-
-    const exec = (cmd) => {
-        document.execCommand(cmd, false, null);
-        if(contentRef.current) contentRef.current.focus();
-    };
-
+    const handleInput = () => { if (contentRef.current) onChange(contentRef.current.innerHTML); };
+    const exec = (cmd) => { document.execCommand(cmd, false, null); if(contentRef.current) contentRef.current.focus(); };
     return (
         <div className="border rounded bg-white overflow-hidden d-flex flex-column" style={{height: '250px'}}>
             <div className="bg-light border-bottom p-2 d-flex gap-2 align-items-center">
@@ -264,13 +256,144 @@ const SimpleRichTextEditor = ({ initialValue, onChange }) => {
                 <div className="vr mx-1"></div>
                 <button type="button" className="btn btn-sm btn-light border" onClick={(e) => {e.preventDefault(); exec('insertUnorderedList');}} title="List"><ListIcon size={16}/></button>
             </div>
-            <div 
-                ref={contentRef}
-                className="flex-grow-1 p-3 custom-scrollbar"
-                style={{outline: 'none', overflowY: 'auto'}}
-                contentEditable={true}
-                onInput={handleInput}
-            />
+            <div ref={contentRef} className="flex-grow-1 p-3 custom-scrollbar" style={{outline: 'none', overflowY: 'auto'}} contentEditable={true} onInput={handleInput} />
+        </div>
+    );
+};
+
+// --- CALENDAR COMPONENT ---
+const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang }) => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+
+    const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+    
+    // Logic: Thứ 2 = 0, CN = 6
+    const getFirstDayOfMonthMonStart = (year, month) => {
+        const day = new Date(year, month, 1).getDay();
+        return day === 0 ? 6 : day - 1;
+    };
+
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const totalDays = daysInMonth(year, month);
+    const startDay = getFirstDayOfMonthMonStart(year, month);
+
+    const totalSlots = startDay + totalDays;
+    const numRows = Math.ceil(totalSlots / 7);
+
+    const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+    const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+    // const monthValue = `${year}-${String(month + 1).padStart(2, '0')}`; // Removed used for input
+    const weekDays = PO_FILES[lang]?.weekdays || PO_FILES['en'].weekdays;
+    const monthNames = PO_FILES[lang]?.month_names || PO_FILES['en'].month_names;
+
+    // Generate Calendar Cells
+    const cells = [];
+    
+    // 1. Ô trống đầu tháng
+    for (let i = 0; i < startDay; i++) {
+        cells.push(<div key={`empty-${i}`} className="border-end border-bottom bg-light bg-opacity-10"></div>);
+    }
+    
+    // 2. Ô ngày trong tháng
+    for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        // FILTER: Ẩn task đã hoàn thành (Completed)
+        const dayTasks = tasks.filter(t => t.due_date === dateStr && t.status !== 'Completed');
+        const isToday = new Date().toISOString().split('T')[0] === dateStr;
+
+        cells.push(
+            <div key={day} 
+                 className={`border-end border-bottom p-1 sm:p-2 d-flex flex-column gap-1 position-relative transition-hover ${isToday ? '' : 'bg-white'}`} 
+                 style={{
+                     overflow: 'hidden', 
+                     cursor: 'pointer',
+                     backgroundColor: isToday ? '#e3f2fd' : '#fff' // Màu xanh nhạt (Light Blue) cho ngày hôm nay
+                 }} 
+                 onDoubleClick={() => onAddToday(dateStr)}
+                 title="Double click to add task"
+            >
+                <div className="d-flex justify-content-between align-items-start">
+                    <span className={`fw-bold small d-flex align-items-center justify-content-center ${isToday ? 'bg-primary text-white shadow-sm rounded-circle' : 'text-secondary'}`} 
+                          style={{width: '24px', height: '24px'}}>
+                        {day}
+                    </span>
+                    {dayTasks.length > 0 && <span className="badge bg-light text-secondary border rounded-pill d-none d-sm-inline-block" style={{fontSize: '0.6rem'}}>{dayTasks.length}</span>}
+                </div>
+                
+                <div className="d-flex flex-column gap-1 mt-1 overflow-hidden">
+                    {dayTasks.map((task, idx) => {
+                        if (idx > 3) return null; 
+                        
+                        let bgClass = 'bg-light text-dark border'; 
+                        if (task.priority === 'High') bgClass = 'bg-danger text-white border-danger';
+                        else if (task.priority === 'Normal') bgClass = 'bg-primary text-white border-primary';
+                        else if (task.priority === 'Low') bgClass = 'bg-secondary text-white border-secondary';
+                        
+                        return (
+                            <div key={task.id} 
+                                 className={`badge ${bgClass} text-truncate cursor-pointer shadow-sm rounded px-1 py-1`} 
+                                 style={{
+                                    maxWidth: '100%', 
+                                    textAlign: 'left', 
+                                    fontWeight: '500',
+                                 }}
+                                 onClick={(e) => { e.stopPropagation(); onEditTask(task); }}
+                                 title={`${task.description} (${task.priority})`}
+                            >
+                                <span style={{fontSize: '0.7rem'}} className="d-block text-truncate">{task.description}</span>
+                            </div>
+                        );
+                    })}
+                    {dayTasks.length > 4 && (
+                        <div className="text-center text-primary small fw-bold mt-1" style={{fontSize: '0.65rem'}}>
+                            +{dayTasks.length - 4}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // 3. Ô trống cuối tháng
+    const remainingSlots = (numRows * 7) - totalSlots;
+    for (let i = 0; i < remainingSlots; i++) {
+        cells.push(<div key={`empty-end-${i}`} className="border-end border-bottom bg-light bg-opacity-10"></div>);
+    }
+
+    return (
+        <div className="card shadow-sm border-0 h-100 d-flex flex-column">
+            {/* Header Responsive: Flex column on mobile, row on desktop */}
+            <div className="card-header bg-white py-3 border-bottom d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
+                <div className="d-flex align-items-center gap-3">
+                    <button className="btn btn-light btn-sm border rounded-circle p-2" onClick={prevMonth}><ChevronLeft size={18}/></button>
+                    <h5 className="mb-0 fw-bold text-dark text-capitalize text-center" style={{minWidth: '160px'}}>
+                        {monthNames[month]} <span className="fw-light text-muted">{year}</span>
+                    </h5>
+                    <button className="btn btn-light btn-sm border rounded-circle p-2" onClick={nextMonth}><ChevronRight size={18}/></button>
+                </div>
+                {/* Ẩn input chọn tháng/năm theo yêu cầu */}
+                <div className="d-flex gap-2 w-100 w-sm-auto justify-content-center">
+                    <button className="btn btn-outline-primary btn-sm" onClick={() => setCurrentDate(new Date())}>{t('today')}</button>
+                </div>
+            </div>
+            
+            <div className="flex-grow-1 d-flex flex-column overflow-hidden bg-white">
+                {/* Header Weekdays */}
+                <div className="d-grid border-bottom border-start bg-light" style={{gridTemplateColumns: 'repeat(7, 1fr)'}}>
+                    {weekDays.map((d, i) => (
+                        <div key={i} className={`py-2 text-center text-uppercase fw-bold small border-end ${i >= 5 ? 'text-danger' : 'text-secondary'}`} style={{fontSize: '0.75rem'}}>{d}</div>
+                    ))}
+                </div>
+                {/* Calendar Grid */}
+                <div className="flex-grow-1 d-grid border-start border-top" style={{
+                    gridTemplateColumns: 'repeat(7, 1fr)', 
+                    gridTemplateRows: `repeat(${numRows}, 1fr)`, 
+                }}>
+                    {cells}
+                </div>
+            </div>
         </div>
     );
 };
@@ -324,6 +447,7 @@ const BootstrapLoader = () => {
       .cursor-pointer { cursor: pointer; }
       .sort-icon { display: inline-block; margin-left: 4px; opacity: 0.5; }
       .th-hover:hover { background-color: #e9ecef; }
+      .transition-hover:hover { background-color: #f8f9fa; }
     `;
     document.head.appendChild(style);
     return () => { 
@@ -517,7 +641,21 @@ export default function App() {
   const handleAddOwner = async () => { if(!newOwnerName.trim()) return; if(isDemoMode) setOwners([...owners, newOwnerName]); else { try { await authFetch(`/config/owners`, { method: 'POST', body: JSON.stringify({ name: newOwnerName }) }); fetchData(); } catch(e) {} } setNewOwnerName(''); };
   const handleDeleteOwner = async (ownerName) => { if(!confirm(t('confirm_delete'))) return; if(isDemoMode) setOwners(owners.filter(o => o !== ownerName)); else { try { await authFetch(`/config/owners/${encodeURIComponent(ownerName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} } };
 
-  const openAddModal = () => { setEditingId(null); setNewTask({ description: '', notes: '', category_name: categories[0] || '', owner_name: owners[0] || '', priority: 'Normal', status: 'Not Started', due_date: '', is_important: false, is_urgent: false }); setShowModal(true); };
+  const openAddModal = (initialDate = '') => { 
+      setEditingId(null); 
+      setNewTask({ 
+          description: '', 
+          notes: '', 
+          category_name: categories[0] || '', 
+          owner_name: owners[0] || '', 
+          priority: 'Normal', 
+          status: 'Not Started', 
+          due_date: initialDate, // Fill date if provided
+          is_important: false, 
+          is_urgent: false 
+      }); 
+      setShowModal(true); 
+  };
   
   const openEditModal = (task) => { 
       setEditingId(task.id); 
@@ -566,10 +704,11 @@ export default function App() {
             <div className="btn-group">
                 <button className={`btn btn-sm px-3 ${view === 'dashboard' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('dashboard')}><BarChart2 size={18} className="me-1"/> {t('dashboard')}</button>
                 <button className={`btn btn-sm px-3 ${view === 'list' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('list')}><List size={18} className="me-1"/> {t('list')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'calendar' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('calendar')}><Calendar size={18} className="me-1"/> {t('calendar')}</button>
                 <button className={`btn btn-sm px-3 ${view === 'settings' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('settings')}><Settings size={18} className="me-1"/> {t('settings')}</button>
             </div>
             
-            <button className="btn btn-success btn-sm d-flex align-items-center gap-1 ms-2 px-3 py-1" onClick={openAddModal}><Plus size={18} /> <span style={{fontSize: '0.9rem'}}>{t('add')}</span></button>
+            <button className="btn btn-success btn-sm d-flex align-items-center gap-1 ms-2 px-3 py-1" onClick={() => openAddModal()}><Plus size={18} /> <span style={{fontSize: '0.9rem'}}>{t('add')}</span></button>
 
             <div className="d-flex align-items-center gap-2 mx-2">
                 <img src="https://flagcdn.com/28x21/gb.png" alt="English" className={`lang-flag cursor-pointer ${lang === 'en' ? 'opacity-100 border border-light' : 'opacity-50'}`} style={{width: '26px', height: '19px', filter: lang === 'en' ? 'none' : 'grayscale(100%)', cursor: 'pointer'}} onClick={() => setLang('en')} title="English"/>
@@ -583,7 +722,8 @@ export default function App() {
 
       <div className="flex-grow-1 w-100 overflow-hidden position-relative">
         <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-3">
-            {view !== 'settings' && (
+            {/* KPI CARDS - Hide in Calendar View to give more space? Or keep? Let's keep for now but optional */}
+            {view !== 'settings' && view !== 'calendar' && (
               <div className="row g-3 mb-4">
                   <KpiCard title={t('total_tasks')} value={stats.total} icon={<Briefcase size={22}/>} color="primary" />
                   <KpiCard title={t('completed')} value={stats.completed} sub={`(${stats.total > 0 ? Math.round(stats.completed/stats.total*100) : 0}%)`} icon={<CheckCircle size={22}/>} color="success" />
@@ -593,6 +733,7 @@ export default function App() {
             )}
 
             {view === 'dashboard' ? (
+                // ... (Dashboard code remains same)
                 <div className="row g-4 h-md-100 pb-3">
                     <div className="col-12 col-xl-4 d-flex flex-column">
                         <div className="card shadow-sm border-0 h-100">
@@ -666,6 +807,10 @@ export default function App() {
                             <div className="card-body"><div className="input-group mb-3"><input type="text" className="form-control" placeholder={t('placeholder_owner')} value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} /><button className="btn btn-success" onClick={handleAddOwner}><Plus size={18}/></button></div><ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '400px', overflowY: 'auto'}}>{owners.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_owner')}</li> : owners.map((owner, idx) => (<li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3"><span style={{fontSize: '1rem'}}>{owner}</span><button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteOwner(owner)}><Trash2 size={16}/></button></li>))}</ul></div>
                         </div>
                     </div>
+                </div>
+            ) : view === 'calendar' ? (
+                <div className="h-100">
+                    <CalendarView tasks={tasks} onEditTask={openEditModal} onAddToday={openAddModal} t={t} lang={lang} />
                 </div>
             ) : (
                 <div className="card shadow-sm border-0 h-100 d-flex flex-column">
