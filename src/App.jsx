@@ -20,7 +20,7 @@ try {
   console.warn("Không thể đọc import.meta.env, sử dụng API mặc định.");
 }
 
-const APP_VERSION = "v2.2.1"; // Updated version for fix
+const APP_VERSION = "v2.3";
 
 // --- UTILS ---
 const formatDateTime = (dateStr) => {
@@ -90,6 +90,8 @@ const BootstrapLoader = () => {
       .filter-badge { cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
       .filter-badge.active { border-color: currentColor; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
       .filter-badge:hover { opacity: 0.8; }
+      /* CSS CHO LEGEND */
+      .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
     `;
     document.head.appendChild(style);
     return () => { 
@@ -116,9 +118,9 @@ export default function App() {
   
   // --- STATE LỌC ---
   const [showCompleted, setShowCompleted] = useState(false);
-  const [filterCats, setFilterCats] = useState([]); // Mảng các category đang chọn
-  const [filterOwners, setFilterOwners] = useState([]); // Mảng các owner đang chọn
-  const [showFilters, setShowFilters] = useState(false); // Ẩn/hiện panel filter
+  const [filterCats, setFilterCats] = useState([]); 
+  const [filterOwners, setFilterOwners] = useState([]); 
+  const [showFilters, setShowFilters] = useState(false);
 
   const [newTask, setNewTask] = useState({ 
     description: '', category_name: '', owner_name: '', priority: 'Normal', status: 'Not Started', due_date: '', is_important: false, is_urgent: false
@@ -165,28 +167,13 @@ export default function App() {
 
   useEffect(() => { if(token || isDemoMode) fetchData(); }, [token, isDemoMode]);
 
-  // --- LOGIC SẮP XẾP VÀ LỌC (QUAN TRỌNG) ---
+  // --- LOGIC SẮP XẾP VÀ LỌC ---
   const processedTasks = useMemo(() => {
     let data = [...tasks];
+    if (!showCompleted) data = data.filter(t => t.status !== 'Completed');
+    if (filterCats.length > 0) data = data.filter(t => filterCats.includes(t.category_name));
+    if (filterOwners.length > 0) data = data.filter(t => filterOwners.includes(t.owner_name));
 
-    // 1. FILTER: Ẩn/Hiện Completed
-    if (!showCompleted) {
-        data = data.filter(t => t.status !== 'Completed');
-    }
-
-    // 2. FILTER: Theo Danh mục (Logic OR giữa các mục đã chọn, AND với kết quả chung)
-    // Nếu filterCats rỗng nghĩa là chọn tất cả (không lọc)
-    if (filterCats.length > 0) {
-        data = data.filter(t => filterCats.includes(t.category_name));
-    }
-
-    // 3. FILTER: Theo Người phụ trách
-    // Nếu filterOwners rỗng nghĩa là chọn tất cả
-    if (filterOwners.length > 0) {
-        data = data.filter(t => filterOwners.includes(t.owner_name));
-    }
-
-    // 4. SORTING: Logic sắp xếp tùy chỉnh
     const statusOrder = { 'In Progress': 1, 'Not Started': 2, 'On Hold': 3, 'Completed': 4 };
     data.sort((a, b) => {
         const scoreA = statusOrder[a.status] || 99;
@@ -197,30 +184,14 @@ export default function App() {
         if (!a.due_date && b.due_date) return 1;
         return 0;
     });
-
     return data;
   }, [tasks, showCompleted, filterCats, filterOwners]);
 
+  // --- HANDLERS ---
+  const toggleFilterCat = (cat) => setFilterCats(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+  const toggleFilterOwner = (owner) => setFilterOwners(prev => prev.includes(owner) ? prev.filter(o => o !== owner) : [...prev, owner]);
+  const clearFilters = () => { setFilterCats([]); setFilterOwners([]); };
 
-  // --- FILTER HANDLERS ---
-  const toggleFilterCat = (cat) => {
-    setFilterCats(prev => 
-        prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    );
-  };
-
-  const toggleFilterOwner = (owner) => {
-    setFilterOwners(prev => 
-        prev.includes(owner) ? prev.filter(o => o !== owner) : [...prev, owner]
-    );
-  };
-  
-  const clearFilters = () => {
-      setFilterCats([]);
-      setFilterOwners([]);
-  };
-
-  // --- TASK HANDLERS ---
   const handleSaveTask = async () => {
     if(!newTask.description) return alert("Nhập tên công việc!");
     const payload = { ...newTask, due_date: newTask.due_date === '' ? null : newTask.due_date };
@@ -244,39 +215,13 @@ export default function App() {
     else { await authFetch(`/tasks/${id}`, { method: 'DELETE' }); fetchData(); }
   };
 
-  const handleAddCategory = async () => {
-    if(!newCatName.trim()) return;
-    if(isDemoMode) setCategories([...categories, newCatName]); 
-    else { try { await authFetch(`/config/categories`, { method: 'POST', body: JSON.stringify({ name: newCatName }) }); fetchData(); } catch(e) {} }
-    setNewCatName('');
-  };
-  const handleDeleteCategory = async (catName) => {
-    if(!confirm(`Xóa?`)) return;
-    if(isDemoMode) setCategories(categories.filter(c => c !== catName)); 
-    else { try { await authFetch(`/config/categories/${encodeURIComponent(catName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} }
-  };
-  const handleAddOwner = async () => {
-    if(!newOwnerName.trim()) return;
-    if(isDemoMode) setOwners([...owners, newOwnerName]); 
-    else { try { await authFetch(`/config/owners`, { method: 'POST', body: JSON.stringify({ name: newOwnerName }) }); fetchData(); } catch(e) {} }
-    setNewOwnerName('');
-  };
-  const handleDeleteOwner = async (ownerName) => {
-    if(!confirm(`Xóa?`)) return;
-    if(isDemoMode) setOwners(owners.filter(o => o !== ownerName)); 
-    else { try { await authFetch(`/config/owners/${encodeURIComponent(ownerName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} }
-  };
+  const handleAddCategory = async () => { if(!newCatName.trim()) return; if(isDemoMode) setCategories([...categories, newCatName]); else { try { await authFetch(`/config/categories`, { method: 'POST', body: JSON.stringify({ name: newCatName }) }); fetchData(); } catch(e) {} } setNewCatName(''); };
+  const handleDeleteCategory = async (catName) => { if(!confirm(`Xóa?`)) return; if(isDemoMode) setCategories(categories.filter(c => c !== catName)); else { try { await authFetch(`/config/categories/${encodeURIComponent(catName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} } };
+  const handleAddOwner = async () => { if(!newOwnerName.trim()) return; if(isDemoMode) setOwners([...owners, newOwnerName]); else { try { await authFetch(`/config/owners`, { method: 'POST', body: JSON.stringify({ name: newOwnerName }) }); fetchData(); } catch(e) {} } setNewOwnerName(''); };
+  const handleDeleteOwner = async (ownerName) => { if(!confirm(`Xóa?`)) return; if(isDemoMode) setOwners(owners.filter(o => o !== ownerName)); else { try { await authFetch(`/config/owners/${encodeURIComponent(ownerName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} } };
 
-  const openAddModal = () => {
-    setEditingId(null);
-    setNewTask({ description: '', category_name: categories[0] || '', owner_name: owners[0] || '', priority: 'Normal', status: 'Not Started', due_date: '', is_important: false, is_urgent: false });
-    setShowModal(true);
-  };
-  const openEditModal = (task) => {
-    setEditingId(task.id);
-    setNewTask({ description: task.description, category_name: task.category_name, owner_name: task.owner_name, priority: task.priority, status: task.status, due_date: task.due_date || '', is_important: task.is_important, is_urgent: task.is_urgent });
-    setShowModal(true);
-  };
+  const openAddModal = () => { setEditingId(null); setNewTask({ description: '', category_name: categories[0] || '', owner_name: owners[0] || '', priority: 'Normal', status: 'Not Started', due_date: '', is_important: false, is_urgent: false }); setShowModal(true); };
+  const openEditModal = (task) => { setEditingId(task.id); setNewTask({ description: task.description, category_name: task.category_name, owner_name: task.owner_name, priority: task.priority, status: task.status, due_date: task.due_date || '', is_important: task.is_important, is_urgent: task.is_urgent }); setShowModal(true); };
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -291,19 +236,13 @@ export default function App() {
 
   // --- MAIN RENDER ---
   if (!token && !isDemoMode) {
-      return (
-        <>
-            <BootstrapLoader />
-            <AuthScreen onLogin={(t) => { localStorage.setItem('access_token', t); setToken(t); }} onDemo={() => setIsDemoMode(true)} />
-        </>
-      );
+      return (<> <BootstrapLoader /> <AuthScreen onLogin={(t) => { localStorage.setItem('access_token', t); setToken(t); }} onDemo={() => setIsDemoMode(true)} /> </>);
   }
 
   return (
     <div className="d-flex flex-column w-100 h-100 bg-light font-sans" style={{ fontFamily: 'Inter, sans-serif' }}>
       <BootstrapLoader />
       
-      {/* NAVBAR */}
       <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm flex-shrink-0 w-100 px-3 py-2">
         <div className="container-fluid p-0">
           <a className="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
@@ -325,7 +264,6 @@ export default function App() {
 
       <div className="flex-grow-1 w-100 overflow-hidden position-relative">
         <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-3">
-            {/* --- VIEW CONTENT --- */}
             {view !== 'settings' && (
               <div className="row g-3 mb-4">
                   <KpiCard title="Tổng số Task" value={stats.total} icon={<Briefcase size={22}/>} color="primary" />
@@ -360,6 +298,14 @@ export default function App() {
                          <div className="card shadow-sm border-0 flex-fill">
                             <div className="card-header-excel">📊 Trạng Thái Theo Danh Mục</div>
                             <div className="card-body overflow-auto custom-scrollbar" style={{maxHeight: '350px'}}>
+                                {/* --- LEGEND CHO TRẠNG THÁI --- */}
+                                <div className="d-flex flex-wrap gap-3 mb-3 small text-muted">
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-success"></span> Hoàn thành</div>
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-primary"></span> Đang làm</div>
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-warning"></span> Tạm hoãn</div>
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-secondary"></span> Chưa bắt đầu</div>
+                                </div>
+                                
                                 {categories.map(cat => {
                                     const ts = tasks.filter(t => t.category_name === cat); if(!ts.length) return null;
                                     const total = ts.length; const c = { done: ts.filter(t => t.status === 'Completed').length, wip: ts.filter(t => t.status === 'In Progress').length, hold: ts.filter(t => t.status === 'On Hold').length, new: ts.filter(t => t.status === 'Not Started').length };
@@ -373,6 +319,13 @@ export default function App() {
                          <div className="card shadow-sm border-0 flex-fill">
                             <div className="card-header-excel">🔥 Tính Ưu Tiên Theo Danh Mục</div>
                             <div className="card-body overflow-auto custom-scrollbar" style={{maxHeight: '350px'}}>
+                                {/* --- LEGEND CHO MỨC ĐỘ ƯU TIÊN --- */}
+                                <div className="d-flex flex-wrap gap-3 mb-3 small text-muted">
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-danger"></span> Cao</div>
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-info"></span> Trung bình</div>
+                                    <div className="d-flex align-items-center"><span className="legend-dot bg-light border"></span> Thấp</div>
+                                </div>
+
                                 {categories.map(cat => {
                                     const ts = tasks.filter(t => t.category_name === cat); if(!ts.length) return null;
                                     const total = ts.length; const p = { high: ts.filter(t => t.priority === 'High').length, norm: ts.filter(t => t.priority === 'Normal').length, low: ts.filter(t => t.priority === 'Low').length };
@@ -404,7 +357,6 @@ export default function App() {
                         <div className="d-flex align-items-center gap-3">
                             <h6 className="mb-0 fw-bold text-uppercase text-muted" style={{fontSize: '0.9rem'}}>Danh sách công việc</h6>
                             
-                            {/* --- TOGGLE FILTER PANEL --- */}
                              <button 
                                 className={`btn btn-sm d-flex align-items-center gap-1 border px-2 ${showFilters ? 'btn-primary' : 'btn-white text-secondary'}`}
                                 onClick={() => setShowFilters(!showFilters)}
@@ -415,7 +367,6 @@ export default function App() {
                         </div>
 
                          <div className="d-flex align-items-center gap-2">
-                            {/* --- TOGGLE FILTER COMPLETED --- */}
                             <button 
                                 className={`btn btn-sm d-flex align-items-center gap-1 border px-2 ${showCompleted ? 'btn-light text-primary border-primary' : 'btn-white text-muted'}`}
                                 onClick={() => setShowCompleted(!showCompleted)}
@@ -428,7 +379,6 @@ export default function App() {
                          </div>
                     </div>
                     
-                    {/* --- FILTER PANEL (COLLAPSIBLE) --- */}
                     {showFilters && (
                         <div className="bg-light border-bottom p-3">
                              <div className="d-flex justify-content-between align-items-center mb-2">
@@ -441,7 +391,6 @@ export default function App() {
                              </div>
                              
                              <div className="row g-3">
-                                 {/* Category Filter */}
                                  <div className="col-12 col-md-6">
                                      <div className="small text-muted mb-1 fw-bold">Danh mục:</div>
                                      <div className="d-flex flex-wrap gap-2">
@@ -461,7 +410,6 @@ export default function App() {
                                      </div>
                                  </div>
                                  
-                                 {/* Owner Filter */}
                                  <div className="col-12 col-md-6">
                                      <div className="small text-muted mb-1 fw-bold">Người phụ trách:</div>
                                      <div className="d-flex flex-wrap gap-2">
@@ -499,7 +447,6 @@ export default function App() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {/* SỬ DỤNG PROCESSED TASKS */}
                                 {processedTasks.length === 0 ? (
                                     <tr><td colSpan="8" className="text-center py-5 text-muted fst-italic">Không tìm thấy công việc phù hợp với bộ lọc</td></tr>
                                 ) : (
@@ -530,7 +477,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- MODAL --- */}
       {showModal && (
         <>
           <div 
