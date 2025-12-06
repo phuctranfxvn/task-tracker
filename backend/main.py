@@ -9,14 +9,28 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import sessionmaker, Session, relationship, declarative_base
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+import configparser
+import click
+
+config = configparser.ConfigParser()
+config.read(r'config.conf')
 
 # --- CẤU HÌNH BẢO MẬT ---
-SECRET_KEY = "2342as982734e9" # Đổi chuỗi này thành gì đó bí mật
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 3000
+SECRET_KEY = config.get('TASKTRACKER', 'SECRET_KEY')
+ALGORITHM = config.get('TASKTRACKER', 'ALGORITHM')
+ACCESS_TOKEN_EXPIRE_MINUTES = config.get('TASKTRACKER', 'ACCESS_TOKEN_EXPIRE_MINUTES')
+ACCESS_TOKEN_EXPIRE_MINUTES = int(ACCESS_TOKEN_EXPIRE_MINUTES)
 
 # --- CẤU HÌNH DATABASE ---
-DATABASE_URL = "postgresql://tasktracker:tasktracker@localhost:5432/task_tracker_db"
+DB_HOST = config.get('TASKTRACKER', 'DB_HOST')
+DB_PORT = config.get('TASKTRACKER', 'DB_PORT')
+DB_NAME = config.get('TASKTRACKER', 'DB_NAME')
+DB_USER = config.get('TASKTRACKER', 'DB_USER')
+DB_PASS = config.get('TASKTRACKER', 'DB_PASS')
+
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+FRONTEND_URL = config.get('TASKTRACKER', 'FRONTEND_URL')
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -117,7 +131,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

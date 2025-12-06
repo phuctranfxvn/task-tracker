@@ -3,12 +3,24 @@ import {
   Plus, Trash2, BarChart2, List, 
   CheckCircle, AlertTriangle, Clock, 
   Briefcase, RefreshCw, WifiOff, LayoutDashboard, Menu,
-  Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight
+  Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
+  Eye, EyeOff, Filter, XCircle
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
-const API_URL = "http://localhost:8000";
-const APP_VERSION = "v2.0";
+let API_URL = "http://localhost:8000";
+
+try {
+  // Cố gắng lấy cấu hình từ biến môi trường
+  if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
+    API_URL = import.meta.env.VITE_BACKEND_API_URL;
+  }
+} catch (e) {
+  // Nếu môi trường không hỗ trợ import.meta (gây lỗi truy cập), giữ nguyên localhost
+  console.warn("Không thể đọc import.meta.env, sử dụng API mặc định.");
+}
+
+const APP_VERSION = "v2.2.1"; // Updated version for fix
 
 // --- UTILS ---
 const formatDateTime = (dateStr) => {
@@ -75,6 +87,9 @@ const BootstrapLoader = () => {
       .table-custom tr:hover td { background-color: #f8f9fa; }
       .auth-container { display: flex; align-items: center; justify-content: center; height: 100vh; background-color: #f0f2f5; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; }
       .auth-box { width: 100%; max-width: 400px; background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+      .filter-badge { cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
+      .filter-badge.active { border-color: currentColor; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+      .filter-badge:hover { opacity: 0.8; }
     `;
     document.head.appendChild(style);
     return () => { 
@@ -98,6 +113,12 @@ export default function App() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
+  
+  // --- STATE LỌC ---
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [filterCats, setFilterCats] = useState([]); // Mảng các category đang chọn
+  const [filterOwners, setFilterOwners] = useState([]); // Mảng các owner đang chọn
+  const [showFilters, setShowFilters] = useState(false); // Ẩn/hiện panel filter
 
   const [newTask, setNewTask] = useState({ 
     description: '', category_name: '', owner_name: '', priority: 'Normal', status: 'Not Started', due_date: '', is_important: false, is_urgent: false
@@ -144,7 +165,62 @@ export default function App() {
 
   useEffect(() => { if(token || isDemoMode) fetchData(); }, [token, isDemoMode]);
 
-  // --- HANDLERS ---
+  // --- LOGIC SẮP XẾP VÀ LỌC (QUAN TRỌNG) ---
+  const processedTasks = useMemo(() => {
+    let data = [...tasks];
+
+    // 1. FILTER: Ẩn/Hiện Completed
+    if (!showCompleted) {
+        data = data.filter(t => t.status !== 'Completed');
+    }
+
+    // 2. FILTER: Theo Danh mục (Logic OR giữa các mục đã chọn, AND với kết quả chung)
+    // Nếu filterCats rỗng nghĩa là chọn tất cả (không lọc)
+    if (filterCats.length > 0) {
+        data = data.filter(t => filterCats.includes(t.category_name));
+    }
+
+    // 3. FILTER: Theo Người phụ trách
+    // Nếu filterOwners rỗng nghĩa là chọn tất cả
+    if (filterOwners.length > 0) {
+        data = data.filter(t => filterOwners.includes(t.owner_name));
+    }
+
+    // 4. SORTING: Logic sắp xếp tùy chỉnh
+    const statusOrder = { 'In Progress': 1, 'Not Started': 2, 'On Hold': 3, 'Completed': 4 };
+    data.sort((a, b) => {
+        const scoreA = statusOrder[a.status] || 99;
+        const scoreB = statusOrder[b.status] || 99;
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        if (a.due_date && b.due_date) return new Date(a.due_date) - new Date(b.due_date);
+        if (a.due_date && !b.due_date) return -1;
+        if (!a.due_date && b.due_date) return 1;
+        return 0;
+    });
+
+    return data;
+  }, [tasks, showCompleted, filterCats, filterOwners]);
+
+
+  // --- FILTER HANDLERS ---
+  const toggleFilterCat = (cat) => {
+    setFilterCats(prev => 
+        prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+  };
+
+  const toggleFilterOwner = (owner) => {
+    setFilterOwners(prev => 
+        prev.includes(owner) ? prev.filter(o => o !== owner) : [...prev, owner]
+    );
+  };
+  
+  const clearFilters = () => {
+      setFilterCats([]);
+      setFilterOwners([]);
+  };
+
+  // --- TASK HANDLERS ---
   const handleSaveTask = async () => {
     if(!newTask.description) return alert("Nhập tên công việc!");
     const payload = { ...newTask, due_date: newTask.due_date === '' ? null : newTask.due_date };
@@ -280,7 +356,6 @@ export default function App() {
                             </div>
                         </div>
                     </div>
-                    {/* Charts omitted for brevity, assuming standard dashboard layout */}
                     <div className="col-12 col-md-6 col-xl-4 d-flex flex-column gap-3">
                          <div className="card shadow-sm border-0 flex-fill">
                             <div className="card-header-excel">📊 Trạng Thái Theo Danh Mục</div>
@@ -325,10 +400,90 @@ export default function App() {
                 </div>
             ) : (
                 <div className="card shadow-sm border-0 h-100 d-flex flex-column">
-                    <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                        <h6 className="mb-0 fw-bold text-uppercase text-muted" style={{fontSize: '0.9rem'}}>Danh sách công việc</h6>
-                        <button className="btn btn-outline-secondary btn-sm py-1 px-2" onClick={fetchData}><RefreshCw size={16}/></button>
+                    <div className="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div className="d-flex align-items-center gap-3">
+                            <h6 className="mb-0 fw-bold text-uppercase text-muted" style={{fontSize: '0.9rem'}}>Danh sách công việc</h6>
+                            
+                            {/* --- TOGGLE FILTER PANEL --- */}
+                             <button 
+                                className={`btn btn-sm d-flex align-items-center gap-1 border px-2 ${showFilters ? 'btn-primary' : 'btn-white text-secondary'}`}
+                                onClick={() => setShowFilters(!showFilters)}
+                            >
+                                <Filter size={14} />
+                                <span className="small fw-bold">Bộ lọc {(filterCats.length + filterOwners.length) > 0 && `(${filterCats.length + filterOwners.length})`}</span>
+                            </button>
+                        </div>
+
+                         <div className="d-flex align-items-center gap-2">
+                            {/* --- TOGGLE FILTER COMPLETED --- */}
+                            <button 
+                                className={`btn btn-sm d-flex align-items-center gap-1 border px-2 ${showCompleted ? 'btn-light text-primary border-primary' : 'btn-white text-muted'}`}
+                                onClick={() => setShowCompleted(!showCompleted)}
+                                title={showCompleted ? "Đang hiện task hoàn thành" : "Đang ẩn task hoàn thành"}
+                            >
+                                {showCompleted ? <Eye size={16} /> : <EyeOff size={16} />}
+                                <span className="small fw-bold d-none d-sm-inline">{showCompleted ? 'Hiện Completed' : 'Ẩn Completed'}</span>
+                            </button>
+                            <button className="btn btn-outline-secondary btn-sm py-1 px-2" onClick={fetchData}><RefreshCw size={16}/></button>
+                         </div>
                     </div>
+                    
+                    {/* --- FILTER PANEL (COLLAPSIBLE) --- */}
+                    {showFilters && (
+                        <div className="bg-light border-bottom p-3">
+                             <div className="d-flex justify-content-between align-items-center mb-2">
+                                <span className="fw-bold text-secondary small text-uppercase">Tùy chọn lọc</span>
+                                {(filterCats.length > 0 || filterOwners.length > 0) && (
+                                    <button className="btn btn-link btn-sm text-danger text-decoration-none p-0 d-flex align-items-center gap-1" onClick={clearFilters}>
+                                        <XCircle size={14}/> Xóa bộ lọc
+                                    </button>
+                                )}
+                             </div>
+                             
+                             <div className="row g-3">
+                                 {/* Category Filter */}
+                                 <div className="col-12 col-md-6">
+                                     <div className="small text-muted mb-1 fw-bold">Danh mục:</div>
+                                     <div className="d-flex flex-wrap gap-2">
+                                         {categories.map(c => {
+                                             const isActive = filterCats.includes(c);
+                                             return (
+                                                 <span 
+                                                    key={c} 
+                                                    onClick={() => toggleFilterCat(c)}
+                                                    className={`badge filter-badge px-3 py-2 rounded-pill ${isActive ? 'bg-primary text-white active' : 'bg-white text-dark border-secondary'}`}
+                                                 >
+                                                     {c} {isActive && <X size={12} className="ms-1 inline"/>}
+                                                 </span>
+                                             )
+                                         })}
+                                         {categories.length === 0 && <span className="text-muted fst-italic small">Chưa có danh mục</span>}
+                                     </div>
+                                 </div>
+                                 
+                                 {/* Owner Filter */}
+                                 <div className="col-12 col-md-6">
+                                     <div className="small text-muted mb-1 fw-bold">Người phụ trách:</div>
+                                     <div className="d-flex flex-wrap gap-2">
+                                         {owners.map(o => {
+                                             const isActive = filterOwners.includes(o);
+                                             return (
+                                                 <span 
+                                                    key={o} 
+                                                    onClick={() => toggleFilterOwner(o)}
+                                                    className={`badge filter-badge px-3 py-2 rounded-pill ${isActive ? 'bg-success text-white active' : 'bg-white text-dark border-secondary'}`}
+                                                 >
+                                                     {o} {isActive && <X size={12} className="ms-1 inline"/>}
+                                                 </span>
+                                             )
+                                         })}
+                                         {owners.length === 0 && <span className="text-muted fst-italic small">Chưa có nhân sự</span>}
+                                     </div>
+                                 </div>
+                             </div>
+                        </div>
+                    )}
+
                     <div className="table-responsive flex-grow-1">
                         <table className="table table-custom table-hover mb-0 w-100">
                             <thead className="table-light sticky-top">
@@ -344,24 +499,29 @@ export default function App() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {tasks.map(t => (
-                                    <tr key={t.id}>
-                                        <td className="ps-4 text-muted small">{formatDateTime(t.created_at)}</td>
-                                        <td>
-                                            <div className="fw-bold text-dark text-truncate" style={{maxWidth: '300px', fontSize: '0.95rem'}} title={t.description}>{t.description}</div>
-                                            <div className="d-flex gap-2 mt-1">
-                                                {t.is_urgent && <span className="badge bg-danger rounded-pill" style={{fontSize:'0.7rem'}}>Gấp</span>}
-                                                {t.is_important && <span className="badge bg-warning text-dark rounded-pill" style={{fontSize:'0.7rem'}}>Quan Trọng</span>}
-                                            </div>
-                                        </td>
-                                        <td><span className="badge bg-light text-dark border px-2 py-1" style={{fontSize: '0.85rem', fontWeight: '500'}}>{t.category_name}</span></td>
-                                        <td>{t.owner_name}</td>
-                                        <td><span className={`badge rounded-pill px-2 py-1 ${PRIORITY_BADGES[t.priority]}`} style={{fontSize: '0.8rem'}}>{t.priority}</span></td>
-                                        <td><span className={`badge px-2 py-1 ${STATUS_BADGES[t.status]}`} style={{fontSize: '0.8rem'}}>{t.status}</span></td>
-                                        <td><span className={`fw-medium ${t.due_date && new Date(t.due_date)<new Date() && t.status!=='Completed' ? 'text-danger' : 'text-muted'}`} style={{fontSize: '0.9rem'}}>{t.due_date || '-'}</span></td>
-                                        <td className="text-end pe-3"><button className="btn btn-link text-secondary p-1" onClick={()=>openEditModal(t)}><Edit size={18}/></button><button className="btn btn-link text-secondary p-1 hover-danger" onClick={()=>handleDelete(t.id)}><Trash2 size={18}/></button></td>
-                                    </tr>
-                                ))}
+                                {/* SỬ DỤNG PROCESSED TASKS */}
+                                {processedTasks.length === 0 ? (
+                                    <tr><td colSpan="8" className="text-center py-5 text-muted fst-italic">Không tìm thấy công việc phù hợp với bộ lọc</td></tr>
+                                ) : (
+                                    processedTasks.map(t => (
+                                        <tr key={t.id}>
+                                            <td className="ps-4 text-muted small">{formatDateTime(t.created_at)}</td>
+                                            <td>
+                                                <div className="fw-bold text-dark text-truncate" style={{maxWidth: '300px', fontSize: '0.95rem'}} title={t.description}>{t.description}</div>
+                                                <div className="d-flex gap-2 mt-1">
+                                                    {t.is_urgent && <span className="badge bg-danger rounded-pill" style={{fontSize:'0.7rem'}}>Gấp</span>}
+                                                    {t.is_important && <span className="badge bg-warning text-dark rounded-pill" style={{fontSize:'0.7rem'}}>Quan Trọng</span>}
+                                                </div>
+                                            </td>
+                                            <td><span className="badge bg-light text-dark border px-2 py-1" style={{fontSize: '0.85rem', fontWeight: '500'}}>{t.category_name}</span></td>
+                                            <td>{t.owner_name}</td>
+                                            <td><span className={`badge rounded-pill px-2 py-1 ${PRIORITY_BADGES[t.priority]}`} style={{fontSize: '0.8rem'}}>{t.priority}</span></td>
+                                            <td><span className={`badge px-2 py-1 ${STATUS_BADGES[t.status]}`} style={{fontSize: '0.8rem'}}>{t.status}</span></td>
+                                            <td><span className={`fw-medium ${t.due_date && new Date(t.due_date)<new Date() && t.status!=='Completed' ? 'text-danger' : 'text-muted'}`} style={{fontSize: '0.9rem'}}>{t.due_date || '-'}</span></td>
+                                            <td className="text-end pe-3"><button className="btn btn-link text-secondary p-1" onClick={()=>openEditModal(t)}><Edit size={18}/></button><button className="btn btn-link text-secondary p-1 hover-danger" onClick={()=>handleDelete(t.id)}><Trash2 size={18}/></button></td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -370,17 +530,14 @@ export default function App() {
         </div>
       </div>
 
-      {/* --- MODAL FIX: TÁCH RA KHỎI LUỒNG CHÍNH VÀ DÙNG POSITION FIXED --- */}
+      {/* --- MODAL --- */}
       {showModal && (
         <>
-          {/* Lớp nền tối (Backdrop) */}
           <div 
             className="modal-backdrop fade show" 
             style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9998, backgroundColor: 'rgba(0,0,0,0.5)' }}
             onClick={() => setShowModal(false)}
           ></div>
-
-          {/* Hộp thoại Modal */}
           <div 
             className="modal fade show d-block" 
             tabIndex="-1" 
@@ -494,5 +651,30 @@ function AuthScreen({ onLogin, onDemo }) {
     );
 }
 
-function KpiCard({ title, value, sub, icon, color }) { return (<div className="col-12 col-sm-6 col-xl-3"><div className={`card shadow-sm border-0 border-start border-4 border-${color} h-100`}><div className="card-body py-3 px-4"><div className="d-flex justify-content-between align-items-center mb-2"><span className="text-muted text-uppercase fw-bold text-xs" style={{fontSize: '0.85rem'}}>{title}</span><div className={`bg-${color} bg-opacity-10 text-${color} rounded p-2`}>{icon}</div></div><h3 className="card-title fw-bold mb-0 text-dark" style={{fontSize: '1.8rem'}}>{value} {sub && <span className="fs-6 text-muted fw-normal ms-1">{sub}</span>}</h3></div></div></div>); }
-function SimplePieChart({ total, value, color, bg }) { const percentage = total > 0 ? (value / total) * 100 : 0; return (<div className="pie-chart rounded-circle position-relative d-flex align-items-center justify-content-center" style={{background: `conic-gradient(${color} 0% ${percentage}%, ${bg} ${percentage}% 100%)`, width: '80px', height: '80px'}}><div className="bg-white rounded-circle position-absolute" style={{width: '60%', height: '60%'}}></div><span className="position-relative fw-bold small">{Math.round(percentage)}%</span></div>) }
+function KpiCard({ title, value, sub, icon, color }) { 
+    return (
+        <div className="col-12 col-sm-6 col-xl-3">
+            <div className={`card shadow-sm border-0 border-start border-4 border-${color} h-100`}>
+                <div className="card-body py-3 px-4">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                        <span className="text-muted text-uppercase fw-bold text-xs" style={{fontSize: '0.85rem'}}>{title}</span>
+                        <div className={`bg-${color} bg-opacity-10 text-${color} rounded p-2`}>{icon}</div>
+                    </div>
+                    <h3 className="card-title fw-bold mb-0 text-dark" style={{fontSize: '1.8rem'}}>
+                        {value} {sub && <span className="fs-6 text-muted fw-normal ms-1">{sub}</span>}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    ); 
+}
+
+function SimplePieChart({ total, value, color, bg }) { 
+    const percentage = total > 0 ? (value / total) * 100 : 0; 
+    return (
+        <div className="pie-chart rounded-circle position-relative d-flex align-items-center justify-content-center" style={{background: `conic-gradient(${color} 0% ${percentage}%, ${bg} ${percentage}% 100%)`, width: '80px', height: '80px'}}>
+            <div className="bg-white rounded-circle position-absolute" style={{width: '60%', height: '60%'}}></div>
+            <span className="position-relative fw-bold small">{Math.round(percentage)}%</span>
+        </div>
+    );
+}

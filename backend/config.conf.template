@@ -1,0 +1,10 @@
+[TASKTRACKER]
+SECRET_KEY = ""
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 3000
+FRONTEND_URL=https://frontend.com
+DB_HOST = "localhost"
+DB_PORT = "5432"
+DB_NAME = "db_name"
+DB_USER = "user"
+DB_PASS = "pass"
