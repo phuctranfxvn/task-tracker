@@ -5,12 +5,12 @@ import {
   Briefcase, RefreshCw, WifiOff, LayoutDashboard, Menu,
   Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
   Eye, EyeOff, Filter, XCircle, Globe, Bold, Italic, Underline, List as ListIcon,
-  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key, CheckCheck
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key, CheckCheck, MoreVertical
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v3.0.2"; // Updated version
+const APP_VERSION = "v3.0.4 Mobile Opt"; // Updated version
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -267,7 +267,7 @@ const SimpleRichTextEditor = ({ initialValue, onChange }) => {
     const exec = (cmd) => { document.execCommand(cmd, false, null); if(contentRef.current) contentRef.current.focus(); };
     return (
         <div className="border rounded bg-white overflow-hidden d-flex flex-column" style={{height: '250px'}}>
-            <div className="bg-light border-bottom p-2 d-flex gap-2 align-items-center">
+            <div className="bg-light border-bottom p-2 d-flex gap-2 align-items-center flex-wrap">
                 <button type="button" className="btn btn-sm btn-light border" onClick={(e) => {e.preventDefault(); exec('bold');}} title="Bold"><Bold size={16}/></button>
                 <button type="button" className="btn btn-sm btn-light border" onClick={(e) => {e.preventDefault(); exec('italic');}} title="Italic"><Italic size={16}/></button>
                 <button type="button" className="btn btn-sm btn-light border" onClick={(e) => {e.preventDefault(); exec('underline');}} title="Underline"><Underline size={16}/></button>
@@ -327,6 +327,7 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang }) => {
                  style={{
                      overflow: 'hidden', 
                      cursor: 'pointer',
+                     minHeight: '80px',
                      backgroundColor: isToday ? '#e3f2fd' : '#fff' // Màu xanh nhạt (Light Blue) cho ngày hôm nay
                  }} 
                  onDoubleClick={() => onAddToday(dateStr)}
@@ -384,7 +385,7 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang }) => {
         <div className="card shadow-sm border-0 h-100 d-flex flex-column">
             {/* Header Responsive: Flex column on mobile, row on desktop */}
             <div className="card-header bg-white py-3 border-bottom d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
-                <div className="d-flex align-items-center gap-3">
+                <div className="d-flex align-items-center gap-3 justify-content-between w-100 w-sm-auto">
                     <button className="btn btn-light btn-sm border rounded-circle p-2" onClick={prevMonth}><ChevronLeft size={18}/></button>
                     <h5 className="mb-0 fw-bold text-dark text-capitalize text-center" style={{minWidth: '160px'}}>
                         {monthNames[month]} <span className="fw-light text-muted">{year}</span>
@@ -397,19 +398,21 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang }) => {
                 </div>
             </div>
             
-            <div className="flex-grow-1 d-flex flex-column overflow-hidden bg-white">
-                {/* Header Weekdays */}
-                <div className="d-grid border-bottom border-start bg-light" style={{gridTemplateColumns: 'repeat(7, 1fr)'}}>
-                    {weekDays.map((d, i) => (
-                        <div key={i} className={`py-2 text-center text-uppercase fw-bold small border-end ${i >= 5 ? 'text-danger' : 'text-secondary'}`} style={{fontSize: '0.75rem'}}>{d}</div>
-                    ))}
-                </div>
-                {/* Calendar Grid */}
-                <div className="flex-grow-1 d-grid border-start border-top" style={{
-                    gridTemplateColumns: 'repeat(7, 1fr)', 
-                    gridTemplateRows: `repeat(${numRows}, 1fr)`, 
-                }}>
-                    {cells}
+            <div className="flex-grow-1 d-flex flex-column bg-white overflow-auto">
+                <div style={{minWidth: '600px', height: '100%', display: 'flex', flexDirection: 'column'}}>
+                     {/* Header Weekdays */}
+                    <div className="d-grid border-bottom border-start bg-light" style={{gridTemplateColumns: 'repeat(7, 1fr)'}}>
+                        {weekDays.map((d, i) => (
+                            <div key={i} className={`py-2 text-center text-uppercase fw-bold small border-end ${i >= 5 ? 'text-danger' : 'text-secondary'}`} style={{fontSize: '0.75rem'}}>{d}</div>
+                        ))}
+                    </div>
+                    {/* Calendar Grid */}
+                    <div className="flex-grow-1 d-grid border-start border-top" style={{
+                        gridTemplateColumns: 'repeat(7, 1fr)', 
+                        gridTemplateRows: `repeat(${numRows}, 1fr)`, 
+                    }}>
+                        {cells}
+                    </div>
                 </div>
             </div>
         </div>
@@ -445,7 +448,20 @@ const BootstrapLoader = () => {
     document.head.appendChild(font);
     const style = document.createElement("style");
     style.innerHTML = `
-      html, body, #root { height: 100%; width: 100%; margin: 0; padding: 0; overflow: hidden; font-size: 15px; }
+      html, body, #root { width: 100%; margin: 0; padding: 0; font-size: 15px; }
+      /* Desktop: Fixed height, hidden overflow */
+      @media (min-width: 768px) {
+        html, body, #root { height: 100%; overflow: hidden; }
+        .responsive-height { height: 100%; overflow: hidden; }
+      }
+      /* Mobile: Auto height, allow scroll */
+      @media (max-width: 767.98px) {
+        html, body, #root { height: auto; overflow-x: hidden; }
+        .responsive-height { height: auto; min-height: 100vh; }
+        .navbar-brand { font-size: 1rem !important; }
+        .kpi-card-col { margin-bottom: 1rem; }
+      }
+      
       .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
       .custom-scrollbar::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 3px; }
       .card-header-excel { background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; font-weight: 700; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.5px; color: #555; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.5rem; }
@@ -455,7 +471,7 @@ const BootstrapLoader = () => {
       .table-custom tr { transition: background-color 0.2s; }
       .table-custom tr:hover td { background-color: #f1f3f5; cursor: pointer; }
       .auth-container { display: flex; align-items: center; justify-content: center; height: 100vh; background-color: #f0f2f5; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; }
-      .auth-box { width: 100%; max-width: 400px; background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+      .auth-box { width: 100%; max-width: 400px; background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin: 1rem; }
       .filter-badge { cursor: pointer; transition: all 0.2s; border: 1px solid transparent; }
       .filter-badge.active { border-color: currentColor; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
       .filter-badge:hover { opacity: 0.8; }
@@ -466,6 +482,9 @@ const BootstrapLoader = () => {
       .sort-icon { display: inline-block; margin-left: 4px; opacity: 0.5; }
       .th-hover:hover { background-color: #e9ecef; }
       .transition-hover:hover { background-color: #f8f9fa; }
+      .mobile-scroll-nav { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+      .mobile-scroll-nav::-webkit-scrollbar { display: none; }
+      .hover-danger:hover { color: #dc3545 !important; background-color: rgba(220, 53, 69, 0.1); border-radius: 4px; }
     `;
     document.head.appendChild(style);
     return () => { 
@@ -740,42 +759,54 @@ export default function App() {
   }
 
   return (
-    <div className="d-flex flex-column w-100 h-100 bg-light font-sans" style={{ fontFamily: 'Inter, sans-serif' }}>
+    <div className="d-flex flex-column w-100 responsive-height bg-light font-sans" style={{ fontFamily: 'Inter, sans-serif' }}>
       <BootstrapLoader />
       
       <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm flex-shrink-0 w-100 px-3 py-2">
-        <div className="container-fluid p-0">
+        <div className="container-fluid p-0 d-flex flex-wrap align-items-center justify-content-between">
           <a className="navbar-brand d-flex align-items-center gap-2 fw-bold" href="#">
             <LayoutDashboard size={22} className="text-success"/> 
-            <span style={{fontSize: '1.2rem'}}>{t('app_name')} {APP_VERSION}</span>
+            <span style={{fontSize: '1.1rem'}}>{t('app_name')}</span>
           </a>
-          <div className="d-flex gap-2 align-items-center">
+          
+          <div className="d-flex gap-2 align-items-center order-lg-2">
              {isDemoMode && <span className="text-warning small d-none d-md-flex align-items-center me-2 border border-warning px-2 rounded"><WifiOff size={14} className="me-1"/> {t('demo_mode')}</span>}
-            
-            <div className="btn-group">
-                <button className={`btn btn-sm px-3 ${view === 'dashboard' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('dashboard')}><BarChart2 size={18} className="me-1"/> {t('dashboard')}</button>
-                <button className={`btn btn-sm px-3 ${view === 'list' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('list')}><List size={18} className="me-1"/> {t('list')}</button>
-                <button className={`btn btn-sm px-3 ${view === 'calendar' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('calendar')}><Calendar size={18} className="me-1"/> {t('calendar')}</button>
-                <button className={`btn btn-sm px-3 ${view === 'settings' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('settings')}><Settings size={18} className="me-1"/> {t('settings')}</button>
+             
+             {/* DESKTOP NAV: Inline */}
+             <div className="d-none d-md-flex btn-group me-2">
+                <button className={`btn btn-sm px-3 ${view === 'dashboard' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('dashboard')}><BarChart2 size={16} className="me-1"/> {t('dashboard')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'list' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('list')}><List size={16} className="me-1"/> {t('list')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'calendar' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('calendar')}><Calendar size={16} className="me-1"/> {t('calendar')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'settings' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('settings')}><Settings size={16} className="me-1"/> {t('settings')}</button>
             </div>
-            
-            <button className="btn btn-success btn-sm d-flex align-items-center gap-1 ms-2 px-3 py-1" onClick={() => openAddModal()}><Plus size={18} /> <span style={{fontSize: '0.9rem'}}>{t('add')}</span></button>
 
-            <div className="d-flex align-items-center gap-2 mx-2">
+             <button className="btn btn-success btn-sm d-flex align-items-center gap-1 px-3 py-1 fw-bold" onClick={() => openAddModal()}><Plus size={18} /> <span className="d-none d-sm-inline">{t('add')}</span></button>
+
+             <div className="d-flex align-items-center gap-2 mx-1">
                 <img src="https://flagcdn.com/28x21/gb.png" alt="English" className={`lang-flag cursor-pointer ${lang === 'en' ? 'opacity-100 border border-light' : 'opacity-50'}`} style={{width: '26px', height: '19px', filter: lang === 'en' ? 'none' : 'grayscale(100%)', cursor: 'pointer'}} onClick={() => setLang('en')} title="English"/>
                 <img src="https://flagcdn.com/28x21/vn.png" alt="Tiếng Việt" className={`lang-flag cursor-pointer ${lang === 'vi' ? 'opacity-100 border border-light' : 'opacity-50'}`} style={{width: '26px', height: '19px', filter: lang === 'vi' ? 'none' : 'grayscale(100%)', cursor: 'pointer'}} onClick={() => setLang('vi')} title="Tiếng Việt"/>
             </div>
+            
+            <button className="btn btn-outline-danger btn-sm ms-1" onClick={logout} title={t('logout')}><LogOut size={18}/></button>
+          </div>
 
-            <button className="btn btn-outline-danger btn-sm ms-2" onClick={logout} title={t('logout')}><LogOut size={18}/></button>
+          {/* MOBILE NAV: New Row */}
+          <div className="d-flex d-md-none gap-1 align-items-center mt-2 w-100 mobile-scroll-nav order-lg-1">
+             <div className="btn-group w-auto">
+                <button className={`btn btn-sm px-3 ${view === 'dashboard' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('dashboard')}><BarChart2 size={16} className="me-1"/> {t('dashboard')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'list' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('list')}><List size={16} className="me-1"/> {t('list')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'calendar' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('calendar')}><Calendar size={16} className="me-1"/> {t('calendar')}</button>
+                <button className={`btn btn-sm px-3 ${view === 'settings' ? 'btn-primary' : 'btn-outline-secondary text-white'}`} onClick={() => setView('settings')}><Settings size={16} className="me-1"/> {t('settings')}</button>
+            </div>
           </div>
         </div>
       </nav>
 
-      <div className="flex-grow-1 w-100 overflow-hidden position-relative">
-        <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-3">
+      <div className="flex-grow-1 w-100 overflow-hidden position-relative responsive-height">
+        <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-3" style={{position: 'relative'}}>
             {/* KPI CARDS */}
             {view !== 'settings' && view !== 'calendar' && (
-              <div className="row g-3 mb-4">
+              <div className="row g-2 g-md-3 mb-4">
                   <KpiCard title={t('total_tasks')} value={stats.total} icon={<Briefcase size={22}/>} color="primary" />
                   <KpiCard title={t('completed')} value={stats.completed} sub={`(${stats.total > 0 ? Math.round(stats.completed/stats.total*100) : 0}%)`} icon={<CheckCircle size={22}/>} color="success" />
                   <KpiCard title={t('pending')} value={stats.pending} icon={<Clock size={22}/>} color="warning" />
@@ -810,12 +841,6 @@ export default function App() {
                          <div className="card shadow-sm border-0 flex-fill">
                             <div className="card-header-excel">📊 {t('status_by_cat')}</div>
                             <div className="card-body overflow-auto custom-scrollbar" style={{maxHeight: '350px'}}>
-                                <div className="d-flex flex-wrap gap-3 mb-3 small text-muted">
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-success"></span> {t('legend_done')}</div>
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-primary"></span> {t('legend_wip')}</div>
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-warning"></span> {t('legend_hold')}</div>
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-secondary"></span> {t('legend_new')}</div>
-                                </div>
                                 {categories.map(cat => {
                                     const ts = tasks.filter(t => t.category_name === cat); if(!ts.length) return null;
                                     const total = ts.length; const c = { done: ts.filter(t => t.status === 'Completed').length, wip: ts.filter(t => t.status === 'In Progress').length, hold: ts.filter(t => t.status === 'On Hold').length, new: ts.filter(t => t.status === 'Not Started').length };
@@ -829,11 +854,6 @@ export default function App() {
                          <div className="card shadow-sm border-0 flex-fill">
                             <div className="card-header-excel">🔥 {t('priority_by_cat')}</div>
                             <div className="card-body overflow-auto custom-scrollbar" style={{maxHeight: '350px'}}>
-                                <div className="d-flex flex-wrap gap-3 mb-3 small text-muted">
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-danger"></span> {t('legend_high')}</div>
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-info"></span> {t('legend_med')}</div>
-                                    <div className="d-flex align-items-center"><span className="legend-dot bg-light border"></span> {t('legend_low')}</div>
-                                </div>
                                 {categories.map(cat => {
                                     const ts = tasks.filter(t => t.category_name === cat); if(!ts.length) return null;
                                     const total = ts.length; const p = { high: ts.filter(t => t.priority === 'High').length, norm: ts.filter(t => t.priority === 'Normal').length, low: ts.filter(t => t.priority === 'Low').length };
@@ -872,7 +892,7 @@ export default function App() {
                                         <button className="btn btn-dark" onClick={handleAddSecurityCode}><Plus size={18}/></button>
                                     </div>
                                     <div className="table-responsive border rounded">
-                                        <table className="table table-hover mb-0">
+                                        <table className="table table-hover mb-0" style={{minWidth: '600px'}}>
                                             <thead className="table-light">
                                                 <tr>
                                                     <th>{t('code_col_code')}</th>
@@ -981,7 +1001,8 @@ export default function App() {
                         </div>
                     )}
 
-                    <div className="table-responsive flex-grow-1">
+                    {/* DESKTOP VIEW: TABLE */}
+                    <div className="table-responsive flex-grow-1 d-none d-md-block">
                         <table className="table table-custom table-hover mb-0 w-100">
                             <thead className="table-light sticky-top">
                                 <tr>
@@ -1015,7 +1036,7 @@ export default function App() {
                                 ) : (
                                     processedTasks.map(task => (
                                         <tr key={task.id} onClick={() => openEditModal(task)}>
-                                            <td className="ps-4 text-muted small">{formatDateTime(task.created_at, lang)}</td>
+                                            <td className="ps-4 text-muted small">{formatDateTime(task.created_at, lang).split(' ')[0]}</td>
                                             <td>
                                                 <div className="fw-bold text-dark text-truncate" style={{maxWidth: '300px', fontSize: '0.95rem'}} title={task.description}>{task.description}</div>
                                                 <div className="d-flex gap-2 mt-1">
@@ -1037,6 +1058,48 @@ export default function App() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* MOBILE VIEW: CARDS (Visible on Small Screens) */}
+                    <div className="d-block d-md-none overflow-auto custom-scrollbar p-3 pb-5" style={{height: '100%'}}>
+                        {processedTasks.length === 0 ? (
+                            <div className="text-center py-5 text-muted fst-italic">{t('no_tasks')}</div>
+                        ) : (
+                            processedTasks.map(task => (
+                                <div key={task.id} className="card shadow-sm mb-3 border-0" onClick={() => openEditModal(task)}>
+                                    <div className="card-body p-3">
+                                        <div className="d-flex justify-content-between align-items-start mb-2">
+                                            <h6 className="card-title fw-bold text-dark mb-0 text-truncate me-2" style={{maxWidth: '85%'}}>
+                                                {task.description}
+                                            </h6>
+                                            <button className="btn btn-sm text-muted p-0" onClick={(e) => handleDelete(e, task.id)}>
+                                                <Trash2 size={16} className="text-danger" />
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="d-flex flex-wrap gap-2 mb-2">
+                                            {task.is_urgent && <span className="badge bg-danger rounded-pill" style={{fontSize:'0.7rem'}}>Urgent</span>}
+                                            {task.is_important && <span className="badge bg-warning text-dark rounded-pill" style={{fontSize:'0.7rem'}}>Important</span>}
+                                            <span className={`badge rounded-pill ${PRIORITY_BADGES[task.priority]}`} style={{fontSize: '0.7rem'}}>{task.priority}</span>
+                                            <span className={`badge ${STATUS_BADGES[task.status]}`} style={{fontSize: '0.7rem'}}>{task.status}</span>
+                                        </div>
+
+                                        <div className="d-flex justify-content-between align-items-center text-muted small mt-3">
+                                            <div className="d-flex align-items-center gap-2">
+                                                <span className="badge bg-light text-dark border">{task.category_name}</span>
+                                                <span>• {task.owner_name}</span>
+                                            </div>
+                                            {task.due_date && (
+                                                <div className={`d-flex align-items-center ${new Date(task.due_date) < new Date() && task.status !== 'Completed' ? 'text-danger fw-bold' : ''}`}>
+                                                    <Clock size={14} className="me-1"/>
+                                                    {formatDateTime(task.due_date, lang).split(' ')[0]}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
                 </div>
             )}
         </div>
@@ -1055,21 +1118,21 @@ export default function App() {
             role="dialog"
             style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, overflowY: 'auto' }}
           >
-            <div className="modal-dialog modal-xl modal-dialog-centered" role="document">
+            <div className="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered" role="document">
               <div className="modal-content shadow-lg border-0">
                 <div className="modal-header py-3 bg-white border-bottom-0">
                   <h5 className="modal-title fw-bold text-primary">{editingId ? t('modal_edit_title') : t('modal_add_title')}</h5>
                   <button type="button" className="btn-close" onClick={() => setShowModal(false)} aria-label="Close"></button>
                 </div>
-                <div className="modal-body p-4">
+                <div className="modal-body p-3 p-md-4">
                   <div className="row g-4">
                       {/* Cột trái: Thông tin chính */}
                       <div className="col-12 col-lg-5">
-                          <div className="mb-4">
+                          <div className="mb-3">
                             <label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_desc')}</label>
                             <input type="text" className="form-control form-control-lg border-light bg-light" value={newTask.description} onChange={e => setNewTask({...newTask, description: e.target.value})} autoFocus placeholder={t('ph_desc')}/>
                           </div>
-                          <div className="row g-3 mb-4">
+                          <div className="row g-3 mb-3">
                             <div className="col-6">
                               <label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_cat')}</label>
                               <select className="form-select border-light bg-light" value={newTask.category_name} onChange={e => setNewTask({...newTask, category_name: e.target.value})}>
@@ -1085,7 +1148,7 @@ export default function App() {
                               </select>
                             </div>
                           </div>
-                          <div className="row g-3 mb-4">
+                          <div className="row g-3 mb-3">
                             <div className="col-6">
                               <label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_prio')}</label>
                               <select className="form-select border-light bg-light" value={newTask.priority} onChange={e => setNewTask({...newTask, priority: e.target.value})}>
@@ -1099,7 +1162,7 @@ export default function App() {
                               </select>
                             </div>
                           </div>
-                          <div className="mb-4">
+                          <div className="mb-3">
                               <label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_due')}</label>
                               <input type="date" className="form-control border-light bg-light" value={newTask.due_date} onChange={e => setNewTask({...newTask, due_date: e.target.value})} />
                           </div>
@@ -1127,7 +1190,7 @@ export default function App() {
                       </div>
                   </div>
                 </div>
-                <div className="modal-footer py-3 border-top-0">
+                <div className="modal-footer py-3 border-top-0 bg-white sticky-bottom">
                   <button className="btn btn-light px-4 text-secondary fw-bold" onClick={() => setShowModal(false)}>{t('cancel')}</button>
                   <button className="btn btn-primary px-4 fw-bold" onClick={handleSaveTask}>{editingId ? t('update') : t('save')}</button>
                 </div>
@@ -1267,7 +1330,7 @@ function AuthScreen({ onLogin, onDemo, t }) {
 
 function KpiCard({ title, value, sub, icon, color }) { 
     return (
-        <div className="col-12 col-sm-6 col-xl-3">
+        <div className="col-12 col-sm-6 col-xl-3 kpi-card-col">
             <div className={`card shadow-sm border-0 border-start border-4 border-${color} h-100`}>
                 <div className="card-body py-3 px-4">
                     <div className="d-flex justify-content-between align-items-center mb-2">
