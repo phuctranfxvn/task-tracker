@@ -5,12 +5,12 @@ import {
   Briefcase, RefreshCw, WifiOff, LayoutDashboard, Menu,
   Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
   Eye, EyeOff, Filter, XCircle, Globe, Bold, Italic, Underline, List as ListIcon,
-  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key, CheckCheck
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v3.0.1";
+const APP_VERSION = "v3.0.2"; // Updated version
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -38,6 +38,8 @@ const PO_FILES = {
         "register": "Register",
         "username": "Username",
         "password": "Password",
+        "confirm_password": "Confirm Password",
+        "pass_mismatch": "Passwords do not match!",
         "security_code": "Security Code",
         "auth_error": "Connection Failed or Invalid Credentials",
         "demo_offline": "Try Demo (Offline)",
@@ -129,6 +131,8 @@ const PO_FILES = {
         "register": "Đăng ký",
         "username": "Tên đăng nhập",
         "password": "Mật khẩu",
+        "confirm_password": "Nhập lại mật khẩu",
+        "pass_mismatch": "Mật khẩu không khớp!",
         "security_code": "Mã bảo mật",
         "auth_error": "Lỗi kết nối hoặc sai thông tin",
         "demo_offline": "Dùng thử Demo (Offline)",
@@ -1140,30 +1144,23 @@ function AuthScreen({ onLogin, onDemo, t }) {
     const [isRegister, setIsRegister] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [securityCode, setSecurityCode] = useState(''); // State mã bảo mật
+    const [confirmPassword, setConfirmPassword] = useState(''); // NEW STATE
+    const [securityCode, setSecurityCode] = useState(''); 
     const [error, setError] = useState('');
-    const [hasUsers, setHasUsers] = useState(true); // Kiểm tra hệ thống có user chưa
+    const [hasUsers, setHasUsers] = useState(true); 
 
     // Kiểm tra trạng thái hệ thống khi load
     useEffect(() => {
         const checkSystem = async () => {
             try {
-                // Giả lập check backend, trong thực tế sẽ gọi API /system/status
-                // Ở đây ta gọi API login thử, hoặc một API public nào đó
-                // Tuy nhiên, do fetch API cần URL, ta dùng biến global
-                // Cách đơn giản nhất: Gọi API /system/status mà ta đã tạo ở backend
                 const res = await fetch(`${API_URL}/system/status`);
                 if (res.ok) {
                     const data = await res.json();
                     setHasUsers(data.has_users);
                 } else {
-                    // Endpoint might not exist (404) -> Old backend or issue.
-                    // If 404, we can assume system is "unknown" or "has users" (safe).
-                    // Let's just log a warning instead of error.
                     console.warn("System status endpoint not reachable.");
                 }
             } catch (e) {
-                // Nếu lỗi kết nối, giả định là có user để an toàn (hoặc handle khác)
                 console.error("Check system status failed", e);
             }
         };
@@ -1173,6 +1170,14 @@ function AuthScreen({ onLogin, onDemo, t }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
+        
+        // --- NEW VALIDATION ---
+        if (isRegister && password !== confirmPassword) {
+            setError(t('pass_mismatch'));
+            return;
+        }
+        // ----------------------
+
         const endpoint = isRegister ? '/register' : '/token';
         
         let body, headers;
@@ -1183,7 +1188,7 @@ function AuthScreen({ onLogin, onDemo, t }) {
             // Chỉ gửi security_code nếu hệ thống đã có user
             if (hasUsers) {
                 if (!securityCode) {
-                    setError("Vui lòng nhập mã bảo mật");
+                    setError("Vui lòng nhập mã bảo mật"); // Nên localize text này nếu cần
                     return;
                 }
                 payload.security_code = securityCode;
@@ -1215,8 +1220,31 @@ function AuthScreen({ onLogin, onDemo, t }) {
                 {error && <div className="alert alert-danger">{error}</div>}
                 <form onSubmit={handleSubmit}>
                     <div className="mb-3"><label className="form-label fw-bold">{t('username')}</label><input type="text" className="form-control" required value={username} onChange={e => setUsername(e.target.value)} /></div>
-                    <div className="mb-4"><label className="form-label fw-bold">{t('password')}</label><input type="password" className="form-control" required value={password} onChange={e => setPassword(e.target.value)} /></div>
+                    <div className="mb-3"><label className="form-label fw-bold">{t('password')}</label><input type="password" className="form-control" required value={password} onChange={e => setPassword(e.target.value)} /></div>
                     
+                    {/* --- CONFIRM PASSWORD FIELD (Chỉ hiện khi Đăng ký) --- */}
+                    {isRegister && (
+                         <div className="mb-3">
+                            <label className="form-label fw-bold">{t('confirm_password')}</label>
+                            <div className="input-group">
+                                <span className="input-group-text bg-white"><CheckCheck size={18}/></span>
+                                <input 
+                                    type="password" 
+                                    className={`form-control ${confirmPassword && password !== confirmPassword ? 'is-invalid' : ''}`}
+                                    required 
+                                    value={confirmPassword} 
+                                    onChange={e => setConfirmPassword(e.target.value)} 
+                                    placeholder={t('confirm_password')}
+                                />
+                                {confirmPassword && password !== confirmPassword && (
+                                    <div className="invalid-feedback">
+                                        {t('pass_mismatch')}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Input Mã bảo mật: Chỉ hiện khi Đăng ký VÀ Hệ thống đã có user */}
                     {isRegister && hasUsers && (
                         <div className="mb-4">
