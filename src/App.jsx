@@ -5,12 +5,12 @@ import {
   Briefcase, RefreshCw, WifiOff, LayoutDashboard, Menu,
   Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
   Eye, EyeOff, Filter, XCircle, Globe, Bold, Italic, Underline, List as ListIcon,
-  ArrowUp, ArrowDown, ChevronLeft, ChevronRight
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v2.14";
+const APP_VERSION = "v3.0.1";
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -38,6 +38,7 @@ const PO_FILES = {
         "register": "Register",
         "username": "Username",
         "password": "Password",
+        "security_code": "Security Code",
         "auth_error": "Connection Failed or Invalid Credentials",
         "demo_offline": "Try Demo (Offline)",
         "have_account": "Already have an account? Login",
@@ -80,8 +81,10 @@ const PO_FILES = {
         "no_tasks": "No tasks found matching criteria.",
         "manage_cat": "Manage Categories",
         "manage_owner": "Manage Owners",
+        "manage_security": "Manage Security Codes",
         "placeholder_cat": "Category name...",
         "placeholder_owner": "Owner name...",
+        "placeholder_code": "Enter new code...",
         "empty_cat": "No categories yet",
         "empty_owner": "No owners yet",
         "modal_add_title": "Add New Task",
@@ -105,6 +108,10 @@ const PO_FILES = {
         "overdue_days": "Overdue {days} days",
         "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
         "month_names": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+        "code_col_code": "Code",
+        "code_col_user": "Registered User",
+        "status_used": "Used",
+        "status_unused": "Available",
     },
     vi: {
         "app_name": "Quản Lý Công Việc",
@@ -122,6 +129,7 @@ const PO_FILES = {
         "register": "Đăng ký",
         "username": "Tên đăng nhập",
         "password": "Mật khẩu",
+        "security_code": "Mã bảo mật",
         "auth_error": "Lỗi kết nối hoặc sai thông tin",
         "demo_offline": "Dùng thử Demo (Offline)",
         "have_account": "Đã có tài khoản? Đăng nhập",
@@ -164,8 +172,10 @@ const PO_FILES = {
         "no_tasks": "Không tìm thấy công việc phù hợp.",
         "manage_cat": "Quản lý Danh mục",
         "manage_owner": "Quản lý Người phụ trách",
+        "manage_security": "Quản lý Mã bảo mật",
         "placeholder_cat": "Tên danh mục...",
         "placeholder_owner": "Tên nhân sự...",
+        "placeholder_code": "Nhập mã mới...",
         "empty_cat": "Chưa có danh mục",
         "empty_owner": "Chưa có nhân sự",
         "modal_add_title": "Thêm Công Việc Mới",
@@ -189,6 +199,10 @@ const PO_FILES = {
         "overdue_days": "Quá hạn {days} ngày",
         "weekdays": ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
         "month_names": ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"],
+        "code_col_code": "Mã bảo mật",
+        "code_col_user": "Tài khoản đăng ký",
+        "status_used": "Đã dùng",
+        "status_unused": "Chưa dùng",
     }
 };
 
@@ -463,10 +477,12 @@ const PRIORITY_BADGES = { 'High': 'bg-danger', 'Normal': 'bg-info text-dark', 'L
 export default function App() {
   const { t, lang, setLang } = useTranslation();
   const [token, setToken] = useState(localStorage.getItem('access_token'));
+  const [isAdmin, setIsAdmin] = useState(localStorage.getItem('is_admin') === 'true'); // State cho admin
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [owners, setOwners] = useState([]);
+  const [securityCodes, setSecurityCodes] = useState([]); // State cho mã bảo mật
   const [view, setView] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -477,7 +493,6 @@ export default function App() {
   const [filterOwners, setFilterOwners] = useState([]); 
   const [showFilters, setShowFilters] = useState(false);
   
-  // --- STATE SORT ---
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
 
   const [newTask, setNewTask] = useState({ 
@@ -485,6 +500,7 @@ export default function App() {
   });
   const [newCatName, setNewCatName] = useState('');
   const [newOwnerName, setNewOwnerName] = useState('');
+  const [newSecurityCode, setNewSecurityCode] = useState(''); // State form nhập mã mới
 
   // --- HANDLE ESC KEY TO CLOSE MODAL ---
   useEffect(() => {
@@ -512,7 +528,14 @@ export default function App() {
     return response;
   };
 
-  const logout = () => { localStorage.removeItem('access_token'); setToken(null); setIsDemoMode(false); setTasks([]); };
+  const logout = () => { 
+      localStorage.removeItem('access_token'); 
+      localStorage.removeItem('is_admin');
+      setToken(null); 
+      setIsAdmin(false);
+      setIsDemoMode(false); 
+      setTasks([]); 
+  };
 
   const fetchData = async () => {
     if (!token && !isDemoMode) return;
@@ -520,6 +543,7 @@ export default function App() {
     try {
       const resTasks = await authFetch('/tasks');
       if(resTasks.ok) setTasks(await resTasks.json());
+      
       const resConfig = await authFetch('/config');
       if(resConfig.ok) {
         const config = await resConfig.json();
@@ -528,6 +552,13 @@ export default function App() {
         if(config.categories.length) setNewTask(p => ({...p, category_name: config.categories[0]}));
         if(config.owners.length) setNewTask(p => ({...p, owner_name: config.owners[0]}));
       }
+
+      // Fetch Security Codes if Admin
+      if (isAdmin) {
+          const resCodes = await authFetch('/config/security-codes');
+          if (resCodes.ok) setSecurityCodes(await resCodes.json());
+      }
+
     } catch (err) {
       if (isDemoMode || err.message === "Demo Mode" || err.message.includes("Failed to fetch")) {
           if (!isDemoMode) setIsDemoMode(true);
@@ -539,35 +570,30 @@ export default function App() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { if(token || isDemoMode) fetchData(); }, [token, isDemoMode]);
+  useEffect(() => { if(token || isDemoMode) fetchData(); }, [token, isDemoMode, isAdmin]);
 
   const processedTasks = useMemo(() => {
     let data = [...tasks];
     
-    // 1. FILTER
     if (!showCompleted) data = data.filter(t => t.status !== 'Completed');
     if (filterCats.length > 0) data = data.filter(t => filterCats.includes(t.category_name));
     if (filterOwners.length > 0) data = data.filter(t => filterOwners.includes(t.owner_name));
 
-    // 2. SORTING
     if (sortConfig.key) {
         data.sort((a, b) => {
             let aValue = a[sortConfig.key];
             let bValue = b[sortConfig.key];
 
-            // Xử lý riêng cho Priority để sort theo mức độ quan trọng
             if (sortConfig.key === 'priority') {
                 const order = { 'High': 3, 'Normal': 2, 'Low': 1 };
                 aValue = order[a.priority] || 0;
                 bValue = order[b.priority] || 0;
             } 
-            // Xử lý riêng cho Status để sort theo quy trình
             else if (sortConfig.key === 'status') {
                 const order = { 'In Progress': 2, 'Not Started': 1, 'On Hold': 3, 'Completed': 4 };
                 aValue = order[a.status] || 0;
                 bValue = order[b.status] || 0;
             }
-            // Xử lý string để tránh case-sensitive
             else if (typeof aValue === 'string') {
                 aValue = aValue.toLowerCase();
                 bValue = bValue.toLowerCase();
@@ -578,7 +604,6 @@ export default function App() {
             return 0;
         });
     } else {
-        // Default Sort logic cũ nếu chưa click sort cột nào
         const statusOrder = { 'In Progress': 1, 'Not Started': 2, 'On Hold': 3, 'Completed': 4 };
         data.sort((a, b) => {
             const scoreA = statusOrder[a.status] || 99;
@@ -594,7 +619,6 @@ export default function App() {
     return data;
   }, [tasks, showCompleted, filterCats, filterOwners, sortConfig]);
 
-  // --- SORT HANDLERS ---
   const requestSort = (key) => {
     let direction = 'ascending';
     if (sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -630,7 +654,7 @@ export default function App() {
   };
 
   const handleDelete = async (e, id) => {
-    e.stopPropagation(); // Ngăn sự kiện click row
+    e.stopPropagation();
     if(!confirm(t('confirm_delete'))) return;
     if (isDemoMode) setTasks(tasks.filter(t => t.id !== id));
     else { await authFetch(`/tasks/${id}`, { method: 'DELETE' }); fetchData(); }
@@ -641,6 +665,24 @@ export default function App() {
   const handleAddOwner = async () => { if(!newOwnerName.trim()) return; if(isDemoMode) setOwners([...owners, newOwnerName]); else { try { await authFetch(`/config/owners`, { method: 'POST', body: JSON.stringify({ name: newOwnerName }) }); fetchData(); } catch(e) {} } setNewOwnerName(''); };
   const handleDeleteOwner = async (ownerName) => { if(!confirm(t('confirm_delete'))) return; if(isDemoMode) setOwners(owners.filter(o => o !== ownerName)); else { try { await authFetch(`/config/owners/${encodeURIComponent(ownerName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} } };
 
+  // --- SECURITY CODE HANDLERS ---
+  const handleAddSecurityCode = async () => {
+      if (!newSecurityCode.trim()) return;
+      try {
+          await authFetch(`/config/security-codes`, { method: 'POST', body: JSON.stringify({ code: newSecurityCode }) });
+          fetchData(); // Refresh list
+          setNewSecurityCode('');
+      } catch (e) { alert("Code Exists or Error"); }
+  };
+
+  const handleDeleteSecurityCode = async (code) => {
+      if (!confirm("Delete?")) return;
+      try {
+          await authFetch(`/config/security-codes/${encodeURIComponent(code)}`, { method: 'DELETE' });
+          fetchData();
+      } catch (e) { alert("Error"); }
+  };
+
   const openAddModal = (initialDate = '') => { 
       setEditingId(null); 
       setNewTask({ 
@@ -650,7 +692,7 @@ export default function App() {
           owner_name: owners[0] || '', 
           priority: 'Normal', 
           status: 'Not Started', 
-          due_date: initialDate, // Fill date if provided
+          due_date: initialDate, 
           is_important: false, 
           is_urgent: false 
       }); 
@@ -661,7 +703,7 @@ export default function App() {
       setEditingId(task.id); 
       setNewTask({ 
           description: task.description, 
-          notes: task.notes || '', // Load notes
+          notes: task.notes || '', 
           category_name: task.category_name, 
           owner_name: task.owner_name, 
           priority: task.priority, 
@@ -685,7 +727,12 @@ export default function App() {
   }, [tasks]);
 
   if (!token && !isDemoMode) {
-      return (<> <BootstrapLoader /> <AuthScreen onLogin={(t) => { localStorage.setItem('access_token', t); setToken(t); }} onDemo={() => setIsDemoMode(true)} t={t} /> </>);
+      return (<> <BootstrapLoader /> <AuthScreen onLogin={(t, isAdmin) => { 
+          localStorage.setItem('access_token', t); 
+          localStorage.setItem('is_admin', isAdmin); 
+          setToken(t); 
+          setIsAdmin(isAdmin);
+      }} onDemo={() => setIsDemoMode(true)} t={t} /> </>);
   }
 
   return (
@@ -722,7 +769,7 @@ export default function App() {
 
       <div className="flex-grow-1 w-100 overflow-hidden position-relative">
         <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-3">
-            {/* KPI CARDS - Hide in Calendar View to give more space? Or keep? Let's keep for now but optional */}
+            {/* KPI CARDS */}
             {view !== 'settings' && view !== 'calendar' && (
               <div className="row g-3 mb-4">
                   <KpiCard title={t('total_tasks')} value={stats.total} icon={<Briefcase size={22}/>} color="primary" />
@@ -733,7 +780,7 @@ export default function App() {
             )}
 
             {view === 'dashboard' ? (
-                // ... (Dashboard code remains same)
+                // --- DASHBOARD VIEW ---
                 <div className="row g-4 h-md-100 pb-3">
                     <div className="col-12 col-xl-4 d-flex flex-column">
                         <div className="card shadow-sm border-0 h-100">
@@ -794,6 +841,7 @@ export default function App() {
                     </div>
                 </div>
             ) : view === 'settings' ? (
+                // --- SETTINGS VIEW ---
                 <div className="row g-4">
                     <div className="col-12 col-md-6">
                         <div className="card shadow-sm border-0 h-100">
@@ -807,6 +855,52 @@ export default function App() {
                             <div className="card-body"><div className="input-group mb-3"><input type="text" className="form-control" placeholder={t('placeholder_owner')} value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} /><button className="btn btn-success" onClick={handleAddOwner}><Plus size={18}/></button></div><ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '400px', overflowY: 'auto'}}>{owners.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_owner')}</li> : owners.map((owner, idx) => (<li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3"><span style={{fontSize: '1rem'}}>{owner}</span><button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteOwner(owner)}><Trash2 size={16}/></button></li>))}</ul></div>
                         </div>
                     </div>
+                    
+                    {/* ADMIN: SECURITY CODES PANEL */}
+                    {isAdmin && (
+                        <div className="col-12">
+                            <div className="card shadow-sm border-0 h-100">
+                                <div className="card-header-excel text-dark"><Shield size={16}/> {t('manage_security')}</div>
+                                <div className="card-body">
+                                    <div className="input-group mb-3" style={{maxWidth: '400px'}}>
+                                        <span className="input-group-text bg-white"><Key size={16}/></span>
+                                        <input type="text" className="form-control" placeholder={t('placeholder_code')} value={newSecurityCode} onChange={e => setNewSecurityCode(e.target.value)} />
+                                        <button className="btn btn-dark" onClick={handleAddSecurityCode}><Plus size={18}/></button>
+                                    </div>
+                                    <div className="table-responsive border rounded">
+                                        <table className="table table-hover mb-0">
+                                            <thead className="table-light">
+                                                <tr>
+                                                    <th>{t('code_col_code')}</th>
+                                                    <th>{t('lbl_status')}</th>
+                                                    <th>{t('code_col_user')}</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {securityCodes.map((sc, idx) => (
+                                                    <tr key={idx}>
+                                                        <td className="fw-bold font-monospace">{sc.code}</td>
+                                                        <td>
+                                                            {sc.is_used 
+                                                                ? <span className="badge bg-secondary">{t('status_used')}</span> 
+                                                                : <span className="badge bg-success">{t('status_unused')}</span>
+                                                            }
+                                                        </td>
+                                                        <td>{sc.used_by_username || '-'}</td>
+                                                        <td className="text-end">
+                                                            <button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteSecurityCode(sc.code)}><Trash2 size={16}/></button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                                {securityCodes.length === 0 && <tr><td colSpan="4" className="text-center text-muted fst-italic py-3">No codes generated</td></tr>}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : view === 'calendar' ? (
                 <div className="h-100">
@@ -1046,22 +1140,72 @@ function AuthScreen({ onLogin, onDemo, t }) {
     const [isRegister, setIsRegister] = useState(false);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [securityCode, setSecurityCode] = useState(''); // State mã bảo mật
     const [error, setError] = useState('');
+    const [hasUsers, setHasUsers] = useState(true); // Kiểm tra hệ thống có user chưa
+
+    // Kiểm tra trạng thái hệ thống khi load
+    useEffect(() => {
+        const checkSystem = async () => {
+            try {
+                // Giả lập check backend, trong thực tế sẽ gọi API /system/status
+                // Ở đây ta gọi API login thử, hoặc một API public nào đó
+                // Tuy nhiên, do fetch API cần URL, ta dùng biến global
+                // Cách đơn giản nhất: Gọi API /system/status mà ta đã tạo ở backend
+                const res = await fetch(`${API_URL}/system/status`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setHasUsers(data.has_users);
+                } else {
+                    // Endpoint might not exist (404) -> Old backend or issue.
+                    // If 404, we can assume system is "unknown" or "has users" (safe).
+                    // Let's just log a warning instead of error.
+                    console.warn("System status endpoint not reachable.");
+                }
+            } catch (e) {
+                // Nếu lỗi kết nối, giả định là có user để an toàn (hoặc handle khác)
+                console.error("Check system status failed", e);
+            }
+        };
+        checkSystem();
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         const endpoint = isRegister ? '/register' : '/token';
+        
         let body, headers;
-        if (isRegister) { body = JSON.stringify({ username, password }); headers = { 'Content-Type': 'application/json' }; } 
-        else { const f = new URLSearchParams(); f.append('username', username); f.append('password', password); body = f; headers = { 'Content-Type': 'application/x-www-form-urlencoded' }; }
+        
+        if (isRegister) {
+            // Payload đăng ký
+            const payload = { username, password };
+            // Chỉ gửi security_code nếu hệ thống đã có user
+            if (hasUsers) {
+                if (!securityCode) {
+                    setError("Vui lòng nhập mã bảo mật");
+                    return;
+                }
+                payload.security_code = securityCode;
+            }
+            
+            body = JSON.stringify(payload); 
+            headers = { 'Content-Type': 'application/json' }; 
+        } else { 
+            // Payload đăng nhập (form-urlencoded)
+            const f = new URLSearchParams(); 
+            f.append('username', username); 
+            f.append('password', password); 
+            body = f; 
+            headers = { 'Content-Type': 'application/x-www-form-urlencoded' }; 
+        }
 
         try {
             const res = await fetch(`${API_URL}${endpoint}`, { method: 'POST', headers, body });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Lỗi');
-            if (data.access_token) onLogin(data.access_token);
-        } catch (err) { setError(t('auth_error')); }
+            if (data.access_token) onLogin(data.access_token, data.is_admin);
+        } catch (err) { setError(err.message === 'Failed to fetch' ? t('auth_error') : err.message); }
     };
 
     return (
@@ -1072,6 +1216,19 @@ function AuthScreen({ onLogin, onDemo, t }) {
                 <form onSubmit={handleSubmit}>
                     <div className="mb-3"><label className="form-label fw-bold">{t('username')}</label><input type="text" className="form-control" required value={username} onChange={e => setUsername(e.target.value)} /></div>
                     <div className="mb-4"><label className="form-label fw-bold">{t('password')}</label><input type="password" className="form-control" required value={password} onChange={e => setPassword(e.target.value)} /></div>
+                    
+                    {/* Input Mã bảo mật: Chỉ hiện khi Đăng ký VÀ Hệ thống đã có user */}
+                    {isRegister && hasUsers && (
+                        <div className="mb-4">
+                            <label className="form-label fw-bold">{t('security_code')}</label>
+                            <div className="input-group">
+                                <span className="input-group-text bg-white"><Key size={18}/></span>
+                                <input type="text" className="form-control" required value={securityCode} onChange={e => setSecurityCode(e.target.value)} placeholder="Nhập mã được cấp..." />
+                            </div>
+                            <div className="form-text text-muted small fst-italic">Liên hệ Admin để nhận mã kích hoạt.</div>
+                        </div>
+                    )}
+
                     <button type="submit" className="btn btn-primary w-100 py-2 fw-bold mb-3">{isRegister ? t('register') : t('login')}</button>
                 </form>
                 <div className="text-center border-top pt-3"><button className="btn btn-outline-secondary w-100 mb-3 fw-bold d-flex align-items-center justify-content-center gap-2" onClick={onDemo}><WifiOff size={18} /> {t('demo_offline')}</button><button className="btn btn-link text-decoration-none" onClick={() => setIsRegister(!isRegister)}>{isRegister ? t('have_account') : t('no_account')}</button></div>

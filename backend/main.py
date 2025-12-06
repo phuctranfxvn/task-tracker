@@ -11,7 +11,9 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 import configparser
 import click
+import uuid
 
+# Đọc cấu hình
 config = configparser.ConfigParser()
 config.read(r'config.conf')
 
@@ -46,18 +48,31 @@ class UserDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    is_admin = Column(Boolean, default=False)
 
 class CategoryDB(Base):
     __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    user_id = Column(Integer, ForeignKey("users.id")) # Liên kết với User
+    user_id = Column(Integer, ForeignKey("users.id"))
 
 class OwnerDB(Base):
     __tablename__ = "owners"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    user_id = Column(Integer, ForeignKey("users.id")) # Liên kết với User
+    user_id = Column(Integer, ForeignKey("users.id"))
+
+class SecurityCodeDB(Base):
+    __tablename__ = "security_codes"
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, index=True)
+    is_used = Column(Boolean, default=False)
+    used_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    used_by = relationship("UserDB", foreign_keys=[used_by_user_id])
+    created_by = relationship("UserDB", foreign_keys=[created_by_user_id])
 
 class TaskDB(Base):
     __tablename__ = "tasks"
@@ -65,7 +80,7 @@ class TaskDB(Base):
     description = Column(String)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     owner_id = Column(Integer, ForeignKey("owners.id"), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id")) # Liên kết với User
+    user_id = Column(Integer, ForeignKey("users.id"))
     priority = Column(String)
     status = Column(String)
     due_date = Column(Date, nullable=True)
@@ -76,7 +91,7 @@ class TaskDB(Base):
 
     category = relationship("CategoryDB")
     owner = relationship("OwnerDB")
-    user = relationship("UserDB")
+    user = relationship("UserDB", foreign_keys=[user_id])
 
 Base.metadata.create_all(bind=engine)
 
@@ -84,10 +99,12 @@ Base.metadata.create_all(bind=engine)
 class UserCreate(BaseModel):
     username: str
     password: str
+    security_code: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+    is_admin: bool
 
 class TaskCreate(BaseModel):
     description: str
@@ -108,6 +125,17 @@ class TaskResponse(TaskCreate):
 
 class ConfigItem(BaseModel):
     name: str
+
+class SecurityCodeCreate(BaseModel):
+    code: str
+
+class SecurityCodeResponse(BaseModel):
+    code: str
+    is_used: bool
+    used_by_username: Optional[str] = None
+
+class SystemStatus(BaseModel):
+    has_users: bool
 
 # --- AUTH HELPERS ---
 def verify_password(plain_password, hashed_password):
@@ -144,7 +172,6 @@ def get_db():
     finally:
         db.close()
 
-# Dependency để lấy user hiện tại từ Token
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -163,10 +190,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         raise credentials_exception
     return user
 
-# --- HELPERS (Updated with User Context) ---
+# --- HELPERS ---
 def get_or_create_category(db: Session, name: str, user_id: int):
     if not name: return None
-    # Chỉ tìm category của user này
     cat = db.query(CategoryDB).filter(CategoryDB.name == name, CategoryDB.user_id == user_id).first()
     if not cat:
         cat = CategoryDB(name=name, user_id=user_id)
@@ -177,7 +203,6 @@ def get_or_create_category(db: Session, name: str, user_id: int):
 
 def get_or_create_owner(db: Session, name: str, user_id: int):
     if not name: return None
-    # Chỉ tìm owner của user này
     own = db.query(OwnerDB).filter(OwnerDB.name == name, OwnerDB.user_id == user_id).first()
     if not own:
         own = OwnerDB(name=name, user_id=user_id)
@@ -188,20 +213,51 @@ def get_or_create_owner(db: Session, name: str, user_id: int):
 
 # --- API ENDPOINTS ---
 
+# 0. SYSTEM STATUS Check
+@app.get("/system/status", response_model=SystemStatus)
+def check_system_status(db: Session = Depends(get_db)):
+    user_count = db.query(UserDB).count()
+    return {"has_users": user_count > 0}
+
 # 1. AUTHENTICATION
 @app.post("/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(UserDB).filter(UserDB.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
+    
+    user_count = db.query(UserDB).count()
+    is_first_user = user_count == 0
+    
+    security_code_record = None
+
+    if not is_first_user:
+        if not user.security_code:
+            raise HTTPException(status_code=400, detail="Security code required")
+        
+        security_code_record = db.query(SecurityCodeDB).filter(SecurityCodeDB.code == user.security_code).first()
+        if not security_code_record:
+            raise HTTPException(status_code=400, detail="Invalid security code")
+        if security_code_record.is_used:
+            raise HTTPException(status_code=400, detail="Security code already used")
+
     hashed_password = get_password_hash(user.password)
-    new_user = UserDB(username=user.username, hashed_password=hashed_password)
+    new_user = UserDB(
+        username=user.username, 
+        hashed_password=hashed_password,
+        is_admin=is_first_user 
+    )
     db.add(new_user)
     db.commit()
+    db.refresh(new_user)
     
-    # Auto login after register
+    if security_code_record:
+        security_code_record.is_used = True
+        security_code_record.used_by_user_id = new_user.id
+        db.commit()
+    
     access_token = create_access_token(data={"sub": new_user.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "is_admin": new_user.is_admin}
 
 @app.post("/token", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -216,12 +272,56 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "is_admin": user.is_admin}
 
-# 2. TASKS (User Specific)
+# 2. SECURITY CODES (Admin Only)
+@app.get("/config/security-codes", response_model=List[SecurityCodeResponse])
+def get_security_codes(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    codes = db.query(SecurityCodeDB).all()
+    results = []
+    for c in codes:
+        used_by = ""
+        if c.is_used and c.used_by:
+            used_by = c.used_by.username
+        results.append({
+            "code": c.code,
+            "is_used": c.is_used,
+            "used_by_username": used_by
+        })
+    return results
+
+@app.post("/config/security-codes")
+def create_security_code(item: SecurityCodeCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not item.code: raise HTTPException(400, "Code empty")
+    
+    exists = db.query(SecurityCodeDB).filter(SecurityCodeDB.code == item.code).first()
+    if exists: raise HTTPException(400, "Code already exists")
+    
+    new_code = SecurityCodeDB(code=item.code, created_by_user_id=current_user.id)
+    db.add(new_code)
+    db.commit()
+    return {"message": "Created"}
+
+@app.delete("/config/security-codes/{code}")
+def delete_security_code(code: str, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+        
+    db_code = db.query(SecurityCodeDB).filter(SecurityCodeDB.code == code).first()
+    if db_code:
+        db.delete(db_code)
+        db.commit()
+    return {"message": "Deleted"}
+
+# 3. TASKS
 @app.get("/tasks", response_model=List[TaskResponse])
 def read_tasks(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    # Chỉ lấy task của current_user
     tasks = db.query(TaskDB).filter(TaskDB.user_id == current_user.id).order_by(TaskDB.created_at.desc()).all()
     results = []
     for t in tasks:
@@ -249,7 +349,7 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: U
         description=task.description,
         category_id=cat.id if cat else None,
         owner_id=own.id if own else None,
-        user_id=current_user.id, # Gán task cho user hiện tại
+        user_id=current_user.id,
         priority=task.priority,
         status=task.status,
         due_date=task.due_date,
@@ -264,10 +364,9 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: U
 
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, task: TaskCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    # Tìm task và đảm bảo nó thuộc về user hiện tại
     db_task = db.query(TaskDB).filter(TaskDB.id == task_id, TaskDB.user_id == current_user.id).first()
     if not db_task:
-        raise HTTPException(status_code=404, detail="Task not found or permission denied")
+        raise HTTPException(status_code=404, detail="Task not found")
     
     cat = get_or_create_category(db, task.category_name, current_user.id)
     own = get_or_create_owner(db, task.owner_name, current_user.id)
@@ -283,7 +382,7 @@ def update_task(task_id: int, task: TaskCreate, db: Session = Depends(get_db), c
     db_task.notes = task.notes
 
     db.commit()
-    return {"message": "Updated successfully"}
+    return {"message": "Updated"}
 
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
@@ -294,16 +393,14 @@ def delete_task(task_id: int, db: Session = Depends(get_db), current_user: UserD
     db.commit()
     return {"message": "Deleted"}
 
-# 3. CONFIG (User Specific)
+# 4. CONFIG
 @app.get("/config")
 def get_config(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    # Lấy config của user hiện tại
     cats = [c.name for c in db.query(CategoryDB).filter(CategoryDB.user_id == current_user.id).order_by(CategoryDB.id).all()]
     owners = [o.name for o in db.query(OwnerDB).filter(OwnerDB.user_id == current_user.id).order_by(OwnerDB.id).all()]
     
-    # Nếu user mới chưa có gì, trả về list mặc định nhưng chưa lưu vào DB
-    if not cats: cats = ['Tài chính', 'Marketing', 'Nhân sự', 'Pháp chế', 'Hành chính']
-    if not owners: owners = ['Tôi', 'Phúc', 'Loan', 'Ngân', 'Hà']
+    if not cats: cats = ['Finance', 'Marketing', 'HR', 'Legal', 'Admin', 'IT']
+    if not owners: owners = ['Me', 'John', 'Alice', 'Bob', 'Sarah']
     
     return {"categories": cats, "owners": owners}
 
