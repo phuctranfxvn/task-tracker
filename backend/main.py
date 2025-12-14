@@ -535,7 +535,7 @@ def delete_owner(name: str, db: Session = Depends(get_db), current_user: UserDB 
 # 5. BIRTHDAYS (Giữ nguyên)
 @app.get("/birthdays", response_model=List[BirthdayResponse])
 def get_birthdays(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    return db.query(BirthdayDB).filter(BirthdayDB.user_id == current_user.id).all()
+    return db.query(BirthdayDB).filter(BirthdayDB.user_id == current_user.id).limit(4).all()
 
 @app.post("/birthdays", response_model=BirthdayResponse)
 def create_birthday(item: BirthdayCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
