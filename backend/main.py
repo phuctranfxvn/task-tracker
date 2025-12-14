@@ -1,17 +1,16 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date, datetime, timedelta
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, ForeignKey, Text, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, ForeignKey, Text, DateTime, desc, asc, or_
 from sqlalchemy.sql import func
 from sqlalchemy.orm import sessionmaker, Session, relationship, declarative_base
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import configparser
-import click
-import uuid
+import math
 
 # Đọc cấu hình
 config = configparser.ConfigParser()
@@ -80,7 +79,7 @@ class BirthdayDB(Base):
     name = Column(String)
     day = Column(Integer)
     month = Column(Integer)
-    year = Column(Integer, nullable=True) # Added year field
+    year = Column(Integer, nullable=True) 
     user_id = Column(Integer, ForeignKey("users.id"))
 
 class TaskDB(Base):
@@ -132,6 +131,23 @@ class TaskResponse(TaskCreate):
     class Config:
         from_attributes = True
 
+# NEW: Paginated Response Model
+class PaginatedTaskResponse(BaseModel):
+    items: List[TaskResponse]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+# NEW: Dashboard Stats Model
+class DashboardStats(BaseModel):
+    total: int
+    completed: int
+    pending: int
+    overdue: int
+    urgent: int
+    important: int
+
 class ConfigItem(BaseModel):
     name: str
 
@@ -150,7 +166,7 @@ class BirthdayCreate(BaseModel):
     name: str
     day: int
     month: int
-    year: Optional[int] = None # Added optional year
+    year: Optional[int] = None 
 
 class BirthdayResponse(BirthdayCreate):
     id: int
@@ -239,7 +255,7 @@ def check_system_status(db: Session = Depends(get_db)):
     user_count = db.query(UserDB).count()
     return {"has_users": user_count > 0}
 
-# 1. AUTHENTICATION
+# 1. AUTHENTICATION (Giữ nguyên)
 @app.post("/register", response_model=Token)
 def register(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(UserDB).filter(UserDB.username == user.username).first()
@@ -250,23 +266,15 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     is_first_user = user_count == 0
     
     security_code_record = None
-
     if not is_first_user:
         if not user.security_code:
             raise HTTPException(status_code=400, detail="Security code required")
-        
         security_code_record = db.query(SecurityCodeDB).filter(SecurityCodeDB.code == user.security_code).first()
-        if not security_code_record:
-            raise HTTPException(status_code=400, detail="Invalid security code")
-        if security_code_record.is_used:
-            raise HTTPException(status_code=400, detail="Security code already used")
+        if not security_code_record: raise HTTPException(status_code=400, detail="Invalid security code")
+        if security_code_record.is_used: raise HTTPException(status_code=400, detail="Security code already used")
 
     hashed_password = get_password_hash(user.password)
-    new_user = UserDB(
-        username=user.username, 
-        hashed_password=hashed_password,
-        is_admin=is_first_user 
-    )
+    new_user = UserDB(username=user.username, hashed_password=hashed_password, is_admin=is_first_user)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -283,46 +291,29 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
-    )
+    access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer", "is_admin": user.is_admin}
 
-# 2. SECURITY CODES (Admin Only)
+# 2. SECURITY CODES (Admin Only) (Giữ nguyên)
 @app.get("/config/security-codes", response_model=List[SecurityCodeResponse])
 def get_security_codes(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
+    if not current_user.is_admin: raise HTTPException(status_code=403, detail="Admin access required")
     codes = db.query(SecurityCodeDB).all()
     results = []
     for c in codes:
         used_by = ""
-        if c.is_used and c.used_by:
-            used_by = c.used_by.username
-        results.append({
-            "code": c.code,
-            "is_used": c.is_used,
-            "used_by_username": used_by
-        })
+        if c.is_used and c.used_by: used_by = c.used_by.username
+        results.append({"code": c.code, "is_used": c.is_used, "used_by_username": used_by})
     return results
 
 @app.post("/config/security-codes")
 def create_security_code(item: SecurityCodeCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-    
+    if not current_user.is_admin: raise HTTPException(status_code=403, detail="Admin access required")
     if not item.code: raise HTTPException(400, "Code empty")
-    
     exists = db.query(SecurityCodeDB).filter(SecurityCodeDB.code == item.code).first()
     if exists: raise HTTPException(400, "Code already exists")
-    
     new_code = SecurityCodeDB(code=item.code, created_by_user_id=current_user.id)
     db.add(new_code)
     db.commit()
@@ -330,19 +321,93 @@ def create_security_code(item: SecurityCodeCreate, db: Session = Depends(get_db)
 
 @app.delete("/config/security-codes/{code}")
 def delete_security_code(code: str, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Admin access required")
-        
+    if not current_user.is_admin: raise HTTPException(status_code=403, detail="Admin access required")
     db_code = db.query(SecurityCodeDB).filter(SecurityCodeDB.code == code).first()
     if db_code:
         db.delete(db_code)
         db.commit()
     return {"message": "Deleted"}
 
-# 3. TASKS
-@app.get("/tasks", response_model=List[TaskResponse])
-def read_tasks(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
-    tasks = db.query(TaskDB).filter(TaskDB.user_id == current_user.id).order_by(TaskDB.created_at.desc()).all()
+# 3. TASKS & DASHBOARD STATS (UPDATED)
+
+# NEW: Dashboard Stats Endpoint (Lightweight)
+@app.get("/dashboard/stats", response_model=DashboardStats)
+def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    query = db.query(TaskDB).filter(TaskDB.user_id == current_user.id)
+    
+    total = query.count()
+    completed = query.filter(TaskDB.status == 'Completed').count()
+    pending = total - completed
+    
+    # Overdue: status != Completed AND due_date < today
+    overdue = query.filter(TaskDB.status != 'Completed', TaskDB.due_date < date.today()).count()
+    
+    urgent = query.filter(TaskDB.status != 'Completed', TaskDB.is_urgent == True).count()
+    important = query.filter(TaskDB.status != 'Completed', TaskDB.is_important == True).count()
+    
+    return {
+        "total": total,
+        "completed": completed,
+        "pending": pending,
+        "overdue": overdue,
+        "urgent": urgent,
+        "important": important
+    }
+
+# UPDATED: Pagination, Filtering & Sorting
+@app.get("/tasks", response_model=PaginatedTaskResponse)
+def read_tasks(
+    page: int = 1,
+    size: int = 10,
+    categories: Optional[List[str]] = Query(None),
+    owners: Optional[List[str]] = Query(None),
+    status_filter: Optional[str] = None, # 'Completed', 'In Progress', etc.
+    sort_by: Optional[str] = 'created_at',
+    sort_desc: bool = True,
+    show_completed: bool = True,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db), 
+    current_user: UserDB = Depends(get_current_user)
+):
+    query = db.query(TaskDB).filter(TaskDB.user_id == current_user.id)
+    
+    # Filtering
+    if not show_completed:
+        query = query.filter(TaskDB.status != 'Completed')
+    
+    if status_filter:
+        query = query.filter(TaskDB.status == status_filter)
+        
+    if categories:
+        # Join to filter by category name
+        query = query.join(TaskDB.category).filter(CategoryDB.name.in_(categories))
+        
+    if owners:
+        # Join to filter by owner name
+        query = query.join(TaskDB.owner).filter(OwnerDB.name.in_(owners))
+        
+    if search:
+        search_fmt = f"%{search}%"
+        query = query.filter(TaskDB.description.ilike(search_fmt))
+
+    # Total count (before pagination)
+    total_items = query.count()
+    total_pages = math.ceil(total_items / size) if size > 0 else 1
+
+    # Sorting
+    sort_column = getattr(TaskDB, sort_by, TaskDB.created_at)
+    if sort_desc:
+        query = query.order_by(desc(sort_column))
+    else:
+        query = query.order_by(asc(sort_column))
+
+    # Pagination (Skip limit for size=-1 which implies 'all' for Calendar/Upcoming)
+    if size > 0:
+        offset = (page - 1) * size
+        query = query.offset(offset).limit(size)
+    
+    tasks = query.all()
+    
     results = []
     for t in tasks:
         results.append({
@@ -358,7 +423,14 @@ def read_tasks(db: Session = Depends(get_db), current_user: UserDB = Depends(get
             "notes": t.notes,
             "created_at": t.created_at
         })
-    return results
+        
+    return {
+        "items": results,
+        "total": total_items,
+        "page": page,
+        "size": size,
+        "pages": total_pages
+    }
 
 @app.post("/tasks")
 def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
@@ -385,8 +457,7 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db), current_user: U
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, task: TaskCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     db_task = db.query(TaskDB).filter(TaskDB.id == task_id, TaskDB.user_id == current_user.id).first()
-    if not db_task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    if not db_task: raise HTTPException(status_code=404, detail="Task not found")
     
     cat = get_or_create_category(db, task.category_name, current_user.id)
     own = get_or_create_owner(db, task.owner_name, current_user.id)
@@ -407,21 +478,18 @@ def update_task(task_id: int, task: TaskCreate, db: Session = Depends(get_db), c
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     task = db.query(TaskDB).filter(TaskDB.id == task_id, TaskDB.user_id == current_user.id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    if not task: raise HTTPException(status_code=404, detail="Task not found")
     db.delete(task)
     db.commit()
     return {"message": "Deleted"}
 
-# 4. CONFIG
+# 4. CONFIG (Giữ nguyên)
 @app.get("/config")
 def get_config(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     cats = [c.name for c in db.query(CategoryDB).filter(CategoryDB.user_id == current_user.id).order_by(CategoryDB.id).all()]
     owners = [o.name for o in db.query(OwnerDB).filter(OwnerDB.user_id == current_user.id).order_by(OwnerDB.id).all()]
-    
     if not cats: cats = ['Finance', 'Marketing', 'HR', 'Legal', 'Admin', 'IT']
     if not owners: owners = ['Me', 'John', 'Alice', 'Bob', 'Sarah']
-    
     return {"categories": cats, "owners": owners}
 
 @app.post("/config/categories")
@@ -429,7 +497,6 @@ def add_category(item: ConfigItem, db: Session = Depends(get_db), current_user: 
     if not item.name: raise HTTPException(400, "Name empty")
     exists = db.query(CategoryDB).filter(CategoryDB.name == item.name, CategoryDB.user_id == current_user.id).first()
     if exists: return {"message": "Exists"}
-    
     new_cat = CategoryDB(name=item.name, user_id=current_user.id)
     db.add(new_cat)
     db.commit()
@@ -450,7 +517,6 @@ def add_owner(item: ConfigItem, db: Session = Depends(get_db), current_user: Use
     if not item.name: raise HTTPException(400, "Name empty")
     exists = db.query(OwnerDB).filter(OwnerDB.name == item.name, OwnerDB.user_id == current_user.id).first()
     if exists: return {"message": "Exists"}
-    
     new_owner = OwnerDB(name=item.name, user_id=current_user.id)
     db.add(new_owner)
     db.commit()
@@ -466,7 +532,7 @@ def delete_owner(name: str, db: Session = Depends(get_db), current_user: UserDB 
         db.commit()
     return {"message": "Deleted"}
 
-# 5. BIRTHDAYS
+# 5. BIRTHDAYS (Giữ nguyên)
 @app.get("/birthdays", response_model=List[BirthdayResponse])
 def get_birthdays(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     return db.query(BirthdayDB).filter(BirthdayDB.user_id == current_user.id).all()
@@ -474,9 +540,7 @@ def get_birthdays(db: Session = Depends(get_db), current_user: UserDB = Depends(
 @app.post("/birthdays", response_model=BirthdayResponse)
 def create_birthday(item: BirthdayCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
     if not item.name: raise HTTPException(400, "Name required")
-    if not (1 <= item.day <= 31) or not (1 <= item.month <= 12):
-         raise HTTPException(400, "Invalid Date")
-         
+    if not (1 <= item.day <= 31) or not (1 <= item.month <= 12): raise HTTPException(400, "Invalid Date")
     new_bday = BirthdayDB(name=item.name, day=item.day, month=item.month, year=item.year, user_id=current_user.id)
     db.add(new_bday)
     db.commit()
