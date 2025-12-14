@@ -5,7 +5,8 @@ import {
   Briefcase, RefreshCw, WifiOff, LayoutDashboard, Menu,
   Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
   Eye, EyeOff, Filter, XCircle, Globe, Bold, Italic, Underline, List as ListIcon,
-  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key, CheckCheck, MoreVertical
+  ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key, CheckCheck, MoreVertical,
+  Gift
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
@@ -54,7 +55,9 @@ const PO_FILES = {
         "pending": "In Progress",
         "overdue": "Overdue",
         "upcoming_tasks": "Upcoming Deadlines",
+        "upcoming_birthdays": "Upcoming Birthdays",
         "no_upcoming": "No upcoming deadlines.",
+        "no_upcoming_bday": "No upcoming birthdays.",
         "status_by_cat": "Status by Category",
         "priority_by_cat": "Priority by Category",
         "urgent_tasks": "Urgent Tasks",
@@ -83,12 +86,17 @@ const PO_FILES = {
         "no_tasks": "No tasks found matching criteria.",
         "manage_cat": "Manage Categories",
         "manage_owner": "Manage Owners",
+        "manage_birthday": "Manage Birthdays",
         "manage_security": "Manage Security Codes",
         "placeholder_cat": "Category name...",
         "placeholder_owner": "Owner name...",
         "placeholder_code": "Enter new code...",
+        "placeholder_name": "Name...",
+        "placeholder_day": "Day",
+        "placeholder_month": "Month",
         "empty_cat": "No categories yet",
         "empty_owner": "No owners yet",
+        "empty_birthday": "No birthdays yet",
         "modal_add_title": "Add New Task",
         "modal_edit_title": "Task Details",
         "lbl_desc": "Description",
@@ -114,6 +122,10 @@ const PO_FILES = {
         "code_col_user": "Registered User",
         "status_used": "Used",
         "status_unused": "Available",
+        "bday_col_name": "Name",
+        "bday_col_date": "Date",
+        "days_left": "{days} days left",
+        "turns_age": "Turns {age}",
     },
     vi: {
         "app_name": "Quản Lý Công Việc",
@@ -147,7 +159,9 @@ const PO_FILES = {
         "pending": "Đang xử lý",
         "overdue": "Quá hạn",
         "upcoming_tasks": "Sắp đến hạn",
+        "upcoming_birthdays": "Sinh nhật sắp tới",
         "no_upcoming": "Không có công việc sắp đến hạn.",
+        "no_upcoming_bday": "Không có sinh nhật sắp tới.",
         "status_by_cat": "Trạng thái theo Danh mục",
         "priority_by_cat": "Độ ưu tiên theo Danh mục",
         "urgent_tasks": "Việc Gấp",
@@ -176,12 +190,17 @@ const PO_FILES = {
         "no_tasks": "Không tìm thấy công việc phù hợp.",
         "manage_cat": "Quản lý Danh mục",
         "manage_owner": "Quản lý Người phụ trách",
+        "manage_birthday": "Quản lý Sinh nhật",
         "manage_security": "Quản lý Mã bảo mật",
         "placeholder_cat": "Tên danh mục...",
         "placeholder_owner": "Tên nhân sự...",
         "placeholder_code": "Nhập mã mới...",
+        "placeholder_name": "Tên...",
+        "placeholder_day": "Ngày",
+        "placeholder_month": "Tháng",
         "empty_cat": "Chưa có danh mục",
         "empty_owner": "Chưa có nhân sự",
+        "empty_birthday": "Chưa có dữ liệu sinh nhật",
         "modal_add_title": "Thêm Công Việc Mới",
         "modal_edit_title": "Chi Tiết Công Việc",
         "lbl_desc": "Tên công việc",
@@ -207,6 +226,10 @@ const PO_FILES = {
         "code_col_user": "Tài khoản đăng ký",
         "status_used": "Đã dùng",
         "status_unused": "Chưa dùng",
+        "bday_col_name": "Họ tên",
+        "bday_col_date": "Ngày sinh",
+        "days_left": "Còn {days} ngày",
+        "turns_age": "",
     }
 };
 
@@ -436,6 +459,11 @@ const MOCK_TASKS = [
   { id: 4, description: 'Weekly Team Meeting', notes: '', category_name: 'Admin', owner_name: 'Me', priority: 'Low', status: 'Completed', due_date: addDays(-1), is_urgent: false, is_important: false, created_at: '2023-11-23T14:20:00' },
 ];
 
+const MOCK_BIRTHDAYS = [
+    { id: 1, name: 'John Doe', day: 25, month: 12 },
+    { id: 2, name: 'Alice Smith', day: 1, month: 1 },
+];
+
 const BootstrapLoader = () => {
   useEffect(() => {
     const link = document.createElement("link");
@@ -505,6 +533,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [owners, setOwners] = useState([]);
+  const [birthdays, setBirthdays] = useState([]); // State birthdays
   const [securityCodes, setSecurityCodes] = useState([]); // State cho mã bảo mật
   const [view, setView] = useState('dashboard');
   const [showModal, setShowModal] = useState(false);
@@ -524,6 +553,11 @@ export default function App() {
   const [newCatName, setNewCatName] = useState('');
   const [newOwnerName, setNewOwnerName] = useState('');
   const [newSecurityCode, setNewSecurityCode] = useState(''); // State form nhập mã mới
+  
+  // New Birthday States
+  const [newBdayName, setNewBdayName] = useState('');
+  const [newBdayDay, setNewBdayDay] = useState('');
+  const [newBdayMonth, setNewBdayMonth] = useState('');
 
   // --- HANDLE ESC KEY TO CLOSE MODAL ---
   useEffect(() => {
@@ -576,6 +610,9 @@ export default function App() {
         if(config.owners.length) setNewTask(p => ({...p, owner_name: config.owners[0]}));
       }
 
+      const resBdays = await authFetch('/birthdays');
+      if (resBdays.ok) setBirthdays(await resBdays.json());
+
       // Fetch Security Codes if Admin
       if (isAdmin) {
           const resCodes = await authFetch('/config/security-codes');
@@ -588,6 +625,7 @@ export default function App() {
           setTasks(MOCK_TASKS);
           setCategories(MOCK_CATEGORIES);
           setOwners(MOCK_OWNERS);
+          setBirthdays(MOCK_BIRTHDAYS);
           setNewTask(p => ({...p, category_name: MOCK_CATEGORIES[0], owner_name: MOCK_OWNERS[0]}));
       }
     } finally { setLoading(false); }
@@ -687,6 +725,34 @@ export default function App() {
   const handleDeleteCategory = async (catName) => { if(!confirm(t('confirm_delete'))) return; if(isDemoMode) setCategories(categories.filter(c => c !== catName)); else { try { await authFetch(`/config/categories/${encodeURIComponent(catName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} } };
   const handleAddOwner = async () => { if(!newOwnerName.trim()) return; if(isDemoMode) setOwners([...owners, newOwnerName]); else { try { await authFetch(`/config/owners`, { method: 'POST', body: JSON.stringify({ name: newOwnerName }) }); fetchData(); } catch(e) {} } setNewOwnerName(''); };
   const handleDeleteOwner = async (ownerName) => { if(!confirm(t('confirm_delete'))) return; if(isDemoMode) setOwners(owners.filter(o => o !== ownerName)); else { try { await authFetch(`/config/owners/${encodeURIComponent(ownerName)}`, { method: 'DELETE' }); fetchData(); } catch(e) {} } };
+  
+  // BIRTHDAY HANDLERS
+  const handleAddBirthday = async () => {
+      if(!newBdayName.trim() || !newBdayDay || !newBdayMonth) return;
+      const payload = { name: newBdayName, day: parseInt(newBdayDay), month: parseInt(newBdayMonth) };
+      
+      if(isDemoMode) {
+          setBirthdays([...birthdays, { ...payload, id: Date.now() }]);
+      } else {
+          try {
+             await authFetch('/birthdays', { method: 'POST', body: JSON.stringify(payload) });
+             fetchData();
+          } catch(e) { alert("Error adding birthday"); }
+      }
+      setNewBdayName(''); setNewBdayDay(''); setNewBdayMonth('');
+  };
+
+  const handleDeleteBirthday = async (id) => {
+      if(!confirm(t('confirm_delete'))) return;
+      if(isDemoMode) {
+          setBirthdays(birthdays.filter(b => b.id !== id));
+      } else {
+          try {
+              await authFetch(`/birthdays/${id}`, { method: 'DELETE' });
+              fetchData();
+          } catch(e) {}
+      }
+  }
 
   // --- SECURITY CODE HANDLERS ---
   const handleAddSecurityCode = async () => {
@@ -738,6 +804,22 @@ export default function App() {
       setShowModal(true); 
   };
 
+  // Helper to calculate next birthday
+  const calculateBirthdayCountdown = (day, month) => {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const currentYear = today.getFullYear();
+      
+      let nextBday = new Date(currentYear, month - 1, day);
+      if (nextBday < today) {
+          nextBday.setFullYear(currentYear + 1);
+      }
+      
+      const diffTime = nextBday - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return { diffDays, date: nextBday };
+  };
+
   const stats = useMemo(() => {
     const total = tasks.length;
     const completed = tasks.filter(t => t.status === 'Completed').length;
@@ -746,8 +828,15 @@ export default function App() {
     const urgent = tasks.filter(t => t.is_urgent && t.status !== 'Completed').length;
     const important = tasks.filter(t => t.is_important && t.status !== 'Completed').length;
     const upcomingTasks = tasks.filter(t => t.status !== 'Completed' && t.due_date).sort((a,b) => new Date(a.due_date) - new Date(b.due_date));
-    return { total, completed, pending, overdue, upcomingTasks, urgent, important };
-  }, [tasks]);
+    
+    // Process Birthdays
+    const upcomingBirthdays = birthdays.map(b => {
+        const { diffDays, date } = calculateBirthdayCountdown(b.day, b.month);
+        return { ...b, diffDays, nextDate: date };
+    }).sort((a,b) => a.diffDays - b.diffDays);
+
+    return { total, completed, pending, overdue, upcomingTasks, urgent, important, upcomingBirthdays };
+  }, [tasks, birthdays]);
 
   if (!token && !isDemoMode) {
       return (<> <BootstrapLoader /> <AuthScreen onLogin={(t, isAdmin) => { 
@@ -817,10 +906,10 @@ export default function App() {
             {view === 'dashboard' ? (
                 // --- DASHBOARD VIEW ---
                 <div className="row g-4 h-md-100 pb-3">
-                    <div className="col-12 col-xl-4 d-flex flex-column">
-                        <div className="card shadow-sm border-0 h-100">
+                    <div className="col-12 col-xl-4 d-flex flex-column gap-3">
+                        <div className="card shadow-sm border-0 flex-fill" style={{maxHeight: '400px'}}>
                             <div className="card-header-excel text-danger"><Clock size={16}/> {t('upcoming_tasks')}</div>
-                            <div className="list-group list-group-flush overflow-auto custom-scrollbar" style={{maxHeight: '600px'}}>
+                            <div className="list-group list-group-flush overflow-auto custom-scrollbar h-100">
                                 {stats.upcomingTasks.length === 0 ? <div className="p-4 text-center text-muted fst-italic small">{t('no_upcoming')}</div> : 
                                     stats.upcomingTasks.map((task, index) => (
                                         <div key={task.id} className="list-group-item px-3 py-3 border-bottom d-flex align-items-center gap-2 cursor-pointer hover-bg-light" onClick={() => openEditModal(task)}>
@@ -835,7 +924,41 @@ export default function App() {
                                 }
                             </div>
                         </div>
+
+                         {/* UPCOMING BIRTHDAYS CARD */}
+                         <div className="card shadow-sm border-0 flex-fill">
+                            <div className="card-header-excel text-info"><Gift size={16}/> {t('upcoming_birthdays')}</div>
+                            <div className="list-group list-group-flush overflow-auto custom-scrollbar" style={{maxHeight: '300px'}}>
+                                {stats.upcomingBirthdays.length === 0 ? <div className="p-4 text-center text-muted fst-italic small">{t('no_upcoming_bday')}</div> :
+                                    stats.upcomingBirthdays.map((bday, index) => {
+                                        let bdayColorClass = "text-muted";
+                                        let badgeColor = "bg-light text-dark";
+                                        
+                                        if (bday.diffDays <= 10) { bdayColorClass = "text-danger fw-bold"; badgeColor = "bg-danger text-white"; }
+                                        else if (bday.diffDays <= 20) { bdayColorClass = "text-warning-emphasis fw-bold"; badgeColor = "bg-warning text-dark"; }
+
+                                        return (
+                                            <div key={bday.id} className="list-group-item px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+                                                <div className="d-flex align-items-center gap-2">
+                                                    <div className={`rounded-circle d-flex align-items-center justify-content-center ${badgeColor}`} style={{width: '32px', height: '32px', fontSize: '10px'}}>
+                                                        <Gift size={16}/>
+                                                    </div>
+                                                    <div>
+                                                        <div className="fw-bold text-dark">{bday.name}</div>
+                                                        <div className="small text-secondary">{bday.day}/{bday.month}</div>
+                                                    </div>
+                                                </div>
+                                                <div className={`small ${bdayColorClass}`}>
+                                                    {bday.diffDays === 0 ? t('today') : t('days_left', {days: bday.diffDays})}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                }
+                            </div>
+                        </div>
                     </div>
+
                     {/* ... Charts ... */}
                     <div className="col-12 col-md-6 col-xl-4 d-flex flex-column gap-3">
                          <div className="card shadow-sm border-0 flex-fill">
@@ -867,19 +990,47 @@ export default function App() {
             ) : view === 'settings' ? (
                 // --- SETTINGS VIEW ---
                 <div className="row g-4">
-                    <div className="col-12 col-md-6">
+                    <div className="col-12 col-lg-4">
                         <div className="card shadow-sm border-0 h-100">
                             <div className="card-header-excel text-primary"><List size={16}/> {t('manage_cat')}</div>
-                            <div className="card-body"><div className="input-group mb-3"><input type="text" className="form-control" placeholder={t('placeholder_cat')} value={newCatName} onChange={e => setNewCatName(e.target.value)} /><button className="btn btn-primary" onClick={handleAddCategory}><Plus size={18}/></button></div><ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '400px', overflowY: 'auto'}}>{categories.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_cat')}</li> : categories.map((cat, idx) => (<li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3"><span style={{fontSize: '1rem'}}>{cat}</span><button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteCategory(cat)}><Trash2 size={16}/></button></li>))}</ul></div>
+                            <div className="card-body"><div className="input-group mb-3"><input type="text" className="form-control" placeholder={t('placeholder_cat')} value={newCatName} onChange={e => setNewCatName(e.target.value)} /><button className="btn btn-primary" onClick={handleAddCategory}><Plus size={18}/></button></div><ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '300px', overflowY: 'auto'}}>{categories.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_cat')}</li> : categories.map((cat, idx) => (<li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3"><span style={{fontSize: '1rem'}}>{cat}</span><button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteCategory(cat)}><Trash2 size={16}/></button></li>))}</ul></div>
                         </div>
                     </div>
-                    <div className="col-12 col-md-6">
+                    <div className="col-12 col-lg-4">
                         <div className="card shadow-sm border-0 h-100">
                             <div className="card-header-excel text-success"><User size={16}/> {t('manage_owner')}</div>
-                            <div className="card-body"><div className="input-group mb-3"><input type="text" className="form-control" placeholder={t('placeholder_owner')} value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} /><button className="btn btn-success" onClick={handleAddOwner}><Plus size={18}/></button></div><ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '400px', overflowY: 'auto'}}>{owners.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_owner')}</li> : owners.map((owner, idx) => (<li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3"><span style={{fontSize: '1rem'}}>{owner}</span><button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteOwner(owner)}><Trash2 size={16}/></button></li>))}</ul></div>
+                            <div className="card-body"><div className="input-group mb-3"><input type="text" className="form-control" placeholder={t('placeholder_owner')} value={newOwnerName} onChange={e => setNewOwnerName(e.target.value)} /><button className="btn btn-success" onClick={handleAddOwner}><Plus size={18}/></button></div><ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '300px', overflowY: 'auto'}}>{owners.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_owner')}</li> : owners.map((owner, idx) => (<li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3"><span style={{fontSize: '1rem'}}>{owner}</span><button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteOwner(owner)}><Trash2 size={16}/></button></li>))}</ul></div>
                         </div>
                     </div>
                     
+                    {/* MANAGE BIRTHDAYS */}
+                    <div className="col-12 col-lg-4">
+                        <div className="card shadow-sm border-0 h-100">
+                            <div className="card-header-excel text-info"><Gift size={16}/> {t('manage_birthday')}</div>
+                            <div className="card-body">
+                                <div className="d-flex flex-column gap-2 mb-3">
+                                    <input type="text" className="form-control" placeholder={t('placeholder_name')} value={newBdayName} onChange={e => setNewBdayName(e.target.value)} />
+                                    <div className="input-group">
+                                        <input type="number" min="1" max="31" className="form-control" placeholder={t('placeholder_day')} value={newBdayDay} onChange={e => setNewBdayDay(e.target.value)} />
+                                        <input type="number" min="1" max="12" className="form-control" placeholder={t('placeholder_month')} value={newBdayMonth} onChange={e => setNewBdayMonth(e.target.value)} />
+                                        <button className="btn btn-info text-white" onClick={handleAddBirthday}><Plus size={18}/></button>
+                                    </div>
+                                </div>
+                                <ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '300px', overflowY: 'auto'}}>
+                                    {birthdays.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_birthday')}</li> : birthdays.map((bday, idx) => (
+                                        <li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3">
+                                            <div>
+                                                <div className="fw-bold">{bday.name}</div>
+                                                <div className="small text-muted">{bday.day}/{bday.month}</div>
+                                            </div>
+                                            <button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteBirthday(bday.id)}><Trash2 size={16}/></button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* ADMIN: SECURITY CODES PANEL */}
                     {isAdmin && (
                         <div className="col-12">

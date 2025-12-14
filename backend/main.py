@@ -74,6 +74,14 @@ class SecurityCodeDB(Base):
     used_by = relationship("UserDB", foreign_keys=[used_by_user_id])
     created_by = relationship("UserDB", foreign_keys=[created_by_user_id])
 
+class BirthdayDB(Base):
+    __tablename__ = "birthdays"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    day = Column(Integer)
+    month = Column(Integer)
+    user_id = Column(Integer, ForeignKey("users.id"))
+
 class TaskDB(Base):
     __tablename__ = "tasks"
     id = Column(Integer, primary_key=True, index=True)
@@ -136,6 +144,16 @@ class SecurityCodeResponse(BaseModel):
 
 class SystemStatus(BaseModel):
     has_users: bool
+
+class BirthdayCreate(BaseModel):
+    name: str
+    day: int
+    month: int
+
+class BirthdayResponse(BirthdayCreate):
+    id: int
+    class Config:
+        from_attributes = True
 
 # --- AUTH HELPERS ---
 def verify_password(plain_password, hashed_password):
@@ -443,5 +461,30 @@ def delete_owner(name: str, db: Session = Depends(get_db), current_user: UserDB 
         tasks = db.query(TaskDB).filter(TaskDB.owner_id == owner.id).all()
         for t in tasks: t.owner_id = None
         db.delete(owner)
+        db.commit()
+    return {"message": "Deleted"}
+
+# 5. BIRTHDAYS
+@app.get("/birthdays", response_model=List[BirthdayResponse])
+def get_birthdays(db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    return db.query(BirthdayDB).filter(BirthdayDB.user_id == current_user.id).all()
+
+@app.post("/birthdays", response_model=BirthdayResponse)
+def create_birthday(item: BirthdayCreate, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    if not item.name: raise HTTPException(400, "Name required")
+    if not (1 <= item.day <= 31) or not (1 <= item.month <= 12):
+         raise HTTPException(400, "Invalid Date")
+         
+    new_bday = BirthdayDB(name=item.name, day=item.day, month=item.month, user_id=current_user.id)
+    db.add(new_bday)
+    db.commit()
+    db.refresh(new_bday)
+    return new_bday
+
+@app.delete("/birthdays/{bday_id}")
+def delete_birthday(bday_id: int, db: Session = Depends(get_db), current_user: UserDB = Depends(get_current_user)):
+    bday = db.query(BirthdayDB).filter(BirthdayDB.id == bday_id, BirthdayDB.user_id == current_user.id).first()
+    if bday:
+        db.delete(bday)
         db.commit()
     return {"message": "Deleted"}
