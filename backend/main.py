@@ -80,6 +80,7 @@ class BirthdayDB(Base):
     name = Column(String)
     day = Column(Integer)
     month = Column(Integer)
+    year = Column(Integer, nullable=True) # Added year field
     user_id = Column(Integer, ForeignKey("users.id"))
 
 class TaskDB(Base):
@@ -149,6 +150,7 @@ class BirthdayCreate(BaseModel):
     name: str
     day: int
     month: int
+    year: Optional[int] = None # Added optional year
 
 class BirthdayResponse(BirthdayCreate):
     id: int
@@ -475,7 +477,7 @@ def create_birthday(item: BirthdayCreate, db: Session = Depends(get_db), current
     if not (1 <= item.day <= 31) or not (1 <= item.month <= 12):
          raise HTTPException(400, "Invalid Date")
          
-    new_bday = BirthdayDB(name=item.name, day=item.day, month=item.month, user_id=current_user.id)
+    new_bday = BirthdayDB(name=item.name, day=item.day, month=item.month, year=item.year, user_id=current_user.id)
     db.add(new_bday)
     db.commit()
     db.refresh(new_bday)

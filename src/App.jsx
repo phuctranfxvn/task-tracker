@@ -94,6 +94,7 @@ const PO_FILES = {
         "placeholder_name": "Name...",
         "placeholder_day": "Day",
         "placeholder_month": "Month",
+        "placeholder_year": "Year (Optional)",
         "empty_cat": "No categories yet",
         "empty_owner": "No owners yet",
         "empty_birthday": "No birthdays yet",
@@ -159,7 +160,7 @@ const PO_FILES = {
         "pending": "Đang xử lý",
         "overdue": "Quá hạn",
         "upcoming_tasks": "Sắp đến hạn",
-        "upcoming_birthdays": "Sinh nhật sắp tới",
+        "upcoming_birthdays": "Sắp sinh nhật",
         "no_upcoming": "Không có công việc sắp đến hạn.",
         "no_upcoming_bday": "Không có sinh nhật sắp tới.",
         "status_by_cat": "Trạng thái theo Danh mục",
@@ -198,6 +199,7 @@ const PO_FILES = {
         "placeholder_name": "Tên...",
         "placeholder_day": "Ngày",
         "placeholder_month": "Tháng",
+        "placeholder_year": "Năm (Tùy chọn)",
         "empty_cat": "Chưa có danh mục",
         "empty_owner": "Chưa có nhân sự",
         "empty_birthday": "Chưa có dữ liệu sinh nhật",
@@ -229,7 +231,7 @@ const PO_FILES = {
         "bday_col_name": "Họ tên",
         "bday_col_date": "Ngày sinh",
         "days_left": "Còn {days} ngày",
-        "turns_age": "",
+        "turns_age": "Sắp {age} tuổi",
     }
 };
 
@@ -460,8 +462,8 @@ const MOCK_TASKS = [
 ];
 
 const MOCK_BIRTHDAYS = [
-    { id: 1, name: 'John Doe', day: 25, month: 12 },
-    { id: 2, name: 'Alice Smith', day: 1, month: 1 },
+    { id: 1, name: 'John Doe', day: 25, month: 12, year: 1990 },
+    { id: 2, name: 'Alice Smith', day: 1, month: 1, year: 1995 },
 ];
 
 const BootstrapLoader = () => {
@@ -558,6 +560,7 @@ export default function App() {
   const [newBdayName, setNewBdayName] = useState('');
   const [newBdayDay, setNewBdayDay] = useState('');
   const [newBdayMonth, setNewBdayMonth] = useState('');
+  const [newBdayYear, setNewBdayYear] = useState(''); // Added Year
 
   // --- HANDLE ESC KEY TO CLOSE MODAL ---
   useEffect(() => {
@@ -729,7 +732,13 @@ export default function App() {
   // BIRTHDAY HANDLERS
   const handleAddBirthday = async () => {
       if(!newBdayName.trim() || !newBdayDay || !newBdayMonth) return;
-      const payload = { name: newBdayName, day: parseInt(newBdayDay), month: parseInt(newBdayMonth) };
+      
+      const payload = { 
+          name: newBdayName, 
+          day: parseInt(newBdayDay), 
+          month: parseInt(newBdayMonth),
+          year: newBdayYear ? parseInt(newBdayYear) : null // Included Year
+      };
       
       if(isDemoMode) {
           setBirthdays([...birthdays, { ...payload, id: Date.now() }]);
@@ -739,7 +748,7 @@ export default function App() {
              fetchData();
           } catch(e) { alert("Error adding birthday"); }
       }
-      setNewBdayName(''); setNewBdayDay(''); setNewBdayMonth('');
+      setNewBdayName(''); setNewBdayDay(''); setNewBdayMonth(''); setNewBdayYear('');
   };
 
   const handleDeleteBirthday = async (id) => {
@@ -805,7 +814,7 @@ export default function App() {
   };
 
   // Helper to calculate next birthday
-  const calculateBirthdayCountdown = (day, month) => {
+  const calculateBirthdayCountdown = (day, month, birthYear) => {
       const today = new Date();
       today.setHours(0,0,0,0);
       const currentYear = today.getFullYear();
@@ -817,7 +826,13 @@ export default function App() {
       
       const diffTime = nextBday - today;
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return { diffDays, date: nextBday };
+      
+      let age = null;
+      if (birthYear) {
+          age = nextBday.getFullYear() - birthYear;
+      }
+
+      return { diffDays, date: nextBday, age };
   };
 
   const stats = useMemo(() => {
@@ -831,8 +846,8 @@ export default function App() {
     
     // Process Birthdays
     const upcomingBirthdays = birthdays.map(b => {
-        const { diffDays, date } = calculateBirthdayCountdown(b.day, b.month);
-        return { ...b, diffDays, nextDate: date };
+        const { diffDays, date, age } = calculateBirthdayCountdown(b.day, b.month, b.year);
+        return { ...b, diffDays, nextDate: date, age };
     }).sort((a,b) => a.diffDays - b.diffDays);
 
     return { total, completed, pending, overdue, upcomingTasks, urgent, important, upcomingBirthdays };
@@ -945,11 +960,14 @@ export default function App() {
                                                     </div>
                                                     <div>
                                                         <div className="fw-bold text-dark">{bday.name}</div>
-                                                        <div className="small text-secondary">{bday.day}/{bday.month}</div>
+                                                        <div className="small text-secondary">{bday.day}/{bday.month}{bday.year ? `/${bday.year}` : ''}</div>
                                                     </div>
                                                 </div>
-                                                <div className={`small ${bdayColorClass}`}>
-                                                    {bday.diffDays === 0 ? t('today') : t('days_left', {days: bday.diffDays})}
+                                                <div className="text-end">
+                                                    <div className={`small ${bdayColorClass}`}>
+                                                        {bday.diffDays === 0 ? t('today') : t('days_left', {days: bday.diffDays})}
+                                                    </div>
+                                                    {bday.age && <span className="badge bg-info text-dark rounded-pill" style={{fontSize: '0.65rem'}}>{t('turns_age', {age: bday.age})}</span>}
                                                 </div>
                                             </div>
                                         );
@@ -1010,18 +1028,19 @@ export default function App() {
                             <div className="card-body">
                                 <div className="d-flex flex-column gap-2 mb-3">
                                     <input type="text" className="form-control" placeholder={t('placeholder_name')} value={newBdayName} onChange={e => setNewBdayName(e.target.value)} />
-                                    <div className="input-group">
-                                        <input type="number" min="1" max="31" className="form-control" placeholder={t('placeholder_day')} value={newBdayDay} onChange={e => setNewBdayDay(e.target.value)} />
-                                        <input type="number" min="1" max="12" className="form-control" placeholder={t('placeholder_month')} value={newBdayMonth} onChange={e => setNewBdayMonth(e.target.value)} />
-                                        <button className="btn btn-info text-white" onClick={handleAddBirthday}><Plus size={18}/></button>
+                                    <div className="d-flex gap-1">
+                                        <input type="number" min="1" max="31" className="form-control" placeholder={t('placeholder_day')} value={newBdayDay} onChange={e => setNewBdayDay(e.target.value)} style={{width:'30%'}} />
+                                        <input type="number" min="1" max="12" className="form-control" placeholder={t('placeholder_month')} value={newBdayMonth} onChange={e => setNewBdayMonth(e.target.value)} style={{width:'30%'}} />
+                                        <input type="number" min="1900" max="2100" className="form-control" placeholder={t('placeholder_year')} value={newBdayYear} onChange={e => setNewBdayYear(e.target.value)} style={{width:'40%'}}/>
                                     </div>
+                                    <button className="btn btn-info text-white w-100" onClick={handleAddBirthday}><Plus size={18}/> {t('add')}</button>
                                 </div>
                                 <ul className="list-group list-group-flush border rounded custom-scrollbar" style={{maxHeight: '300px', overflowY: 'auto'}}>
                                     {birthdays.length === 0 ? <li className="list-group-item text-muted fst-italic">{t('empty_birthday')}</li> : birthdays.map((bday, idx) => (
                                         <li key={idx} className="list-group-item d-flex justify-content-between align-items-center py-3">
                                             <div>
                                                 <div className="fw-bold">{bday.name}</div>
-                                                <div className="small text-muted">{bday.day}/{bday.month}</div>
+                                                <div className="small text-muted">{bday.day}/{bday.month}{bday.year ? `/${bday.year}` : ''}</div>
                                             </div>
                                             <button className="btn btn-sm btn-light text-danger" onClick={() => handleDeleteBirthday(bday.id)}><Trash2 size={16}/></button>
                                         </li>
