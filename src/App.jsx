@@ -856,9 +856,9 @@ export default function App() {
                                 <div className="d-flex flex-column gap-2 mb-3">
                                     <input type="text" className="form-control" placeholder={t('placeholder_name')} value={newBdayName} onChange={e => setNewBdayName(e.target.value)} />
                                     <div className="d-flex gap-1">
-                                        <input type="number" min="1" max="31" className="form-control" placeholder={t('placeholder_day')} value={newBdayDay} onChange={e => setNewBdayDay(e.target.value)} style={{width:'80px'}} />
-                                        <input type="number" min="1" max="12" className="form-control" placeholder={t('placeholder_month')} value={newBdayMonth} onChange={e => setNewBdayMonth(e.target.value)} style={{width:'80px'}} />
-                                        <input type="number" min="1900" max="2100" className="form-control" placeholder={t('placeholder_year')} value={newBdayYear} onChange={e => setNewBdayYear(e.target.value)} />
+                                        <input type="number" min="1" max="31" className="form-control" placeholder={t('placeholder_day')} value={newBdayDay} onChange={e => setNewBdayDay(e.target.value)} style={{width:'30%'}} />
+                                        <input type="number" min="1" max="12" className="form-control" placeholder={t('placeholder_month')} value={newBdayMonth} onChange={e => setNewBdayMonth(e.target.value)} style={{width:'30%'}} />
+                                        <input type="number" min="1900" max="2100" className="form-control" placeholder={t('placeholder_year')} value={newBdayYear} onChange={e => setNewBdayYear(e.target.value)} style={{width:'40%'}}/>
                                     </div>
                                     <button className="btn btn-info text-white w-100" onClick={handleAddBirthday}><Plus size={18}/> {t('add')}</button>
                                 </div>
