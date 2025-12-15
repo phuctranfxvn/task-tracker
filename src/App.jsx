@@ -422,7 +422,7 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
         <div className="h-100 d-flex flex-column" style={{backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif"}}>
             <div className="px-4 py-4 d-flex justify-content-between align-items-end">
                 <div>
-                    <h2 className="display-4 fw-bold text-dark text-uppercase m-0" style={{letterSpacing: '-2px'}}>{monthNames[month]} {year}</h2>
+                    <h1 className="display-7 fw-bold text-dark text-uppercase m-0" style={{letterSpacing: '-2px'}}>{monthNames[month]} {year}</h1>
                 </div>
                 <div className="d-flex gap-2">
                     <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={prevMonth}><ChevronLeft size={24}/></button>
