@@ -11,7 +11,7 @@ import {
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v3.1.0 Pagination"; // Updated version
+const APP_VERSION = "v3.3.0 Multi-Task Calendar"; // Updated version
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -117,7 +117,7 @@ const PO_FILES = {
         "today": "Today",
         "tomorrow": "Tomorrow",
         "overdue_days": "Overdue {days} days",
-        "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        "weekdays": ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
         "month_names": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
         "code_col_code": "Code",
         "code_col_user": "Registered User",
@@ -128,7 +128,8 @@ const PO_FILES = {
         "days_left": "{days} days left",
         "turns_age": "Turns {age}",
         "showing_page": "Page {page} of {total}",
-        "search_ph": "Search tasks..."
+        "search_ph": "Search tasks...",
+        "more_tasks": "+{count} more"
     },
     vi: {
         "app_name": "Quản Lý Công Việc",
@@ -224,7 +225,7 @@ const PO_FILES = {
         "today": "Hôm nay",
         "tomorrow": "Ngày mai",
         "overdue_days": "Quá hạn {days} ngày",
-        "weekdays": ["T2", "T3", "T4", "T5", "T6", "T7", "CN"],
+        "weekdays": ["CN", "T2", "T3", "T4", "T5", "T6", "T7"],
         "month_names": ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"],
         "code_col_code": "Mã bảo mật",
         "code_col_user": "Tài khoản đăng ký",
@@ -235,7 +236,8 @@ const PO_FILES = {
         "days_left": "Còn {days} ngày",
         "turns_age": "Sắp {age} tuổi",
         "showing_page": "Trang {page}/{total}",
-        "search_ph": "Tìm kiếm công việc..."
+        "search_ph": "Tìm kiếm công việc...",
+        "more_tasks": "Thêm {count}"
     }
 };
 
@@ -308,31 +310,23 @@ const SimpleRichTextEditor = ({ initialValue, onChange }) => {
     );
 };
 
-// --- CALENDAR COMPONENT (Updated to use server pagination if needed or just handle empty props) ---
-const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang }) => {
-    // Note: Calendar really needs "All Tasks" to be useful. 
-    // In this optimized version, we might only pass the "current page" of tasks if we are lazy, 
-    // BUT the best way is to fetch ALL tasks for Calendar or fetching by month range.
-    // For simplicity here, we assume 'tasks' passed to this component might be limited, 
-    // but the main App component logic below tries to handle it.
-    
+// --- UPDATED CALENDAR VIEW (Support Multiple Tasks) ---
+const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
 
+    useEffect(() => {
+        if (onDateChange) {
+            onDateChange(currentDate);
+        }
+    }, [currentDate]);
+
     const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-    
-    // Logic: Thứ 2 = 0, CN = 6
-    const getFirstDayOfMonthMonStart = (year, month) => {
-        const day = new Date(year, month, 1).getDay();
-        return day === 0 ? 6 : day - 1;
-    };
+    const getFirstDayOfMonthSunStart = (year, month) => new Date(year, month, 1).getDay();
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const totalDays = daysInMonth(year, month);
-    const startDay = getFirstDayOfMonthMonStart(year, month);
-
-    const totalSlots = startDay + totalDays;
-    const numRows = Math.ceil(totalSlots / 7);
+    const startDay = getFirstDayOfMonthSunStart(year, month);
 
     const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
     const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
@@ -340,64 +334,110 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang }) => {
     const weekDays = PO_FILES[lang]?.weekdays || PO_FILES['en'].weekdays;
     const monthNames = PO_FILES[lang]?.month_names || PO_FILES['en'].month_names;
 
+    // Pastel Palette
+    const PASTEL_COLORS = [
+        { bg: '#E4DEFA', text: '#5D4F85', border: '#D0C4F5' }, // Purple
+        { bg: '#F9EAC2', text: '#8A7130', border: '#F2DCA0' }, // Orange/Beige
+        { bg: '#D8F1F8', text: '#3E7B91', border: '#B8E3F0' }, // Blue
+        { bg: '#F8D8E8', text: '#9B456C', border: '#F0B8D4' }, // Pink
+        { bg: '#E0F8D8', text: '#4F8552', border: '#C4F0B8' }, // Green
+    ];
+
+    const getTaskColor = (task) => {
+        if (!task) return PASTEL_COLORS[0];
+        const index = task.id % PASTEL_COLORS.length;
+        return PASTEL_COLORS[index];
+    };
+
     const cells = [];
+    // Empty slots
     for (let i = 0; i < startDay; i++) {
-        cells.push(<div key={`empty-${i}`} className="border-end border-bottom bg-light bg-opacity-10"></div>);
+        cells.push(<div key={`empty-${i}`}></div>);
     }
+    
+    // Days
     for (let day = 1; day <= totalDays; day++) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const dayTasks = tasks.filter(t => t.due_date === dateStr && t.status !== 'Completed');
         const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
+        
         cells.push(
-            <div key={day} 
-                 className={`border-end border-bottom p-1 sm:p-2 d-flex flex-column gap-1 position-relative transition-hover ${isToday ? '' : 'bg-white'}`} 
-                 style={{ overflow: 'hidden', cursor: 'pointer', minHeight: '80px', backgroundColor: isToday ? '#e3f2fd' : '#fff' }} 
-                 onDoubleClick={() => onAddToday(dateStr)}
+            <div 
+                key={day} 
+                className="calendar-day-card d-flex flex-column gap-1"
+                style={{ 
+                    backgroundColor: '#FFFFFF', 
+                    minHeight: '120px', 
+                    borderRadius: '16px', 
+                    padding: '8px',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'box-shadow 0.2s, transform 0.2s',
+                    border: isToday ? '2px solid #0d6efd' : '1px solid transparent',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+                }}
+                onDoubleClick={() => onAddToday(dateStr)}
+                onClick={() => onAddToday(dateStr)} // Click empty space triggers add
             >
-                <div className="d-flex justify-content-between align-items-start">
-                    <span className={`fw-bold small d-flex align-items-center justify-content-center ${isToday ? 'bg-primary text-white shadow-sm rounded-circle' : 'text-secondary'}`} style={{width: '24px', height: '24px'}}>{day}</span>
-                    {dayTasks.length > 0 && <span className="badge bg-light text-secondary border rounded-pill d-none d-sm-inline-block" style={{fontSize: '0.6rem'}}>{dayTasks.length}</span>}
+                <div className={`fw-bold text-center d-flex align-items-center justify-content-center ${isToday ? 'bg-primary text-white rounded-circle shadow-sm' : 'text-secondary'}`} style={{ width: '28px', height: '28px', fontSize: '0.9rem' }}>
+                    {day}
                 </div>
-                <div className="d-flex flex-column gap-1 mt-1 overflow-hidden">
-                    {dayTasks.map((task, idx) => {
-                        if (idx > 3) return null; 
-                        let bgClass = 'bg-light text-dark border'; 
-                        if (task.priority === 'High') bgClass = 'bg-danger text-white border-danger';
-                        else if (task.priority === 'Normal') bgClass = 'bg-primary text-white border-primary';
-                        else if (task.priority === 'Low') bgClass = 'bg-secondary text-white border-secondary';
+
+                <div className="d-flex flex-column gap-1 flex-grow-1 overflow-hidden">
+                    {dayTasks.slice(0, 3).map((task) => {
+                        const colors = getTaskColor(task);
                         return (
-                            <div key={task.id} className={`badge ${bgClass} text-truncate cursor-pointer shadow-sm rounded px-1 py-1`} style={{maxWidth: '100%', textAlign: 'left', fontWeight: '500'}} onClick={(e) => { e.stopPropagation(); onEditTask(task); }}>
-                                <span style={{fontSize: '0.7rem'}} className="d-block text-truncate">{task.description}</span>
+                            <div 
+                                key={task.id}
+                                className="px-2 py-1 rounded shadow-sm d-flex align-items-center"
+                                style={{ 
+                                    backgroundColor: colors.bg, 
+                                    color: colors.text,
+                                    fontSize: '0.75rem',
+                                    fontWeight: '600',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    cursor: 'pointer',
+                                    borderLeft: `3px solid ${colors.border}`
+                                }}
+                                onClick={(e) => { e.stopPropagation(); onEditTask(task); }}
+                                title={task.description}
+                            >
+                                <span className="text-truncate w-100">{task.description}</span>
                             </div>
                         );
                     })}
-                    {dayTasks.length > 4 && <div className="text-center text-primary small fw-bold mt-1" style={{fontSize: '0.65rem'}}>+{dayTasks.length - 4}</div>}
+                    
+                    {dayTasks.length > 3 && (
+                        <div className="text-center text-muted fw-bold" style={{fontSize: '0.7rem'}}>
+                            {t('more_tasks', {count: dayTasks.length - 3})}
+                        </div>
+                    )}
                 </div>
             </div>
         );
     }
-    const remainingSlots = (numRows * 7) - totalSlots;
-    for (let i = 0; i < remainingSlots; i++) {
-        cells.push(<div key={`empty-end-${i}`} className="border-end border-bottom bg-light bg-opacity-10"></div>);
-    }
 
     return (
-        <div className="card shadow-sm border-0 h-100 d-flex flex-column">
-            <div className="card-header bg-white py-3 border-bottom d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
-                <div className="d-flex align-items-center gap-3 justify-content-between w-100 w-sm-auto">
-                    <button className="btn btn-light btn-sm border rounded-circle p-2" onClick={prevMonth}><ChevronLeft size={18}/></button>
-                    <h5 className="mb-0 fw-bold text-dark text-capitalize text-center" style={{minWidth: '160px'}}>{monthNames[month]} <span className="fw-light text-muted">{year}</span></h5>
-                    <button className="btn btn-light btn-sm border rounded-circle p-2" onClick={nextMonth}><ChevronRight size={18}/></button>
+        <div className="h-100 d-flex flex-column" style={{backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif"}}>
+            <div className="px-4 py-4 d-flex justify-content-between align-items-end">
+                <div>
+                    <h2 className="display-4 fw-bold text-dark text-uppercase m-0" style={{letterSpacing: '-2px'}}>{monthNames[month]} {year}</h2>
                 </div>
-                <div className="d-flex gap-2 w-100 w-sm-auto justify-content-center">
-                    <button className="btn btn-outline-primary btn-sm" onClick={() => setCurrentDate(new Date())}>{t('today')}</button>
+                <div className="d-flex gap-2">
+                    <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={prevMonth}><ChevronLeft size={24}/></button>
+                    <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={nextMonth}><ChevronRight size={24}/></button>
                 </div>
             </div>
-            <div className="flex-grow-1 d-flex flex-column bg-white overflow-auto">
-                <div style={{minWidth: '600px', height: '100%', display: 'flex', flexDirection: 'column'}}>
-                    <div className="d-grid border-bottom border-start bg-light" style={{gridTemplateColumns: 'repeat(7, 1fr)'}}>{weekDays.map((d, i) => (<div key={i} className={`py-2 text-center text-uppercase fw-bold small border-end ${i >= 5 ? 'text-danger' : 'text-secondary'}`} style={{fontSize: '0.75rem'}}>{d}</div>))}</div>
-                    <div className="flex-grow-1 d-grid border-start border-top" style={{gridTemplateColumns: 'repeat(7, 1fr)', gridTemplateRows: `repeat(${numRows}, 1fr)`}}>{cells}</div>
+            
+            <div className="flex-grow-1 px-4 pb-4 overflow-auto custom-scrollbar">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px', minWidth: '900px' }}>
+                    {weekDays.map((d, i) => (
+                        <div key={i} className="text-center text-secondary fw-bold mb-2 text-uppercase" style={{fontSize: '0.8rem', letterSpacing: '1px'}}>
+                            {d}
+                        </div>
+                    ))}
+                    {cells}
                 </div>
             </div>
         </div>
@@ -411,7 +451,7 @@ const BootstrapLoader = () => {
     link.rel = "stylesheet";
     document.head.appendChild(link);
     const font = document.createElement("link");
-    font.href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap";
+    font.href = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap";
     font.rel = "stylesheet";
     document.head.appendChild(font);
     const style = document.createElement("style");
@@ -441,6 +481,9 @@ const BootstrapLoader = () => {
       .mobile-scroll-nav { overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
       .mobile-scroll-nav::-webkit-scrollbar { display: none; }
       .hover-danger:hover { color: #dc3545 !important; background-color: rgba(220, 53, 69, 0.1); border-radius: 4px; }
+      
+      /* Calendar Specific Styles */
+      .calendar-day-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important; z-index: 10; }
     `;
     document.head.appendChild(style);
     return () => { 
@@ -487,6 +530,9 @@ export default function App() {
       total: 0,
       pages: 1
   });
+
+  // State for Calendar View
+  const [calendarDateRange, setCalendarDateRange] = useState({ start: null, end: null });
 
   const [newTask, setNewTask] = useState({ 
     description: '', notes: '', category_name: '', owner_name: '', priority: 'Normal', status: 'Not Started', due_date: '', is_important: false, is_urgent: false
@@ -561,7 +607,7 @@ export default function App() {
       } catch (e) {}
   };
 
-  // This is the optimized fetch for list view with pagination
+  // FETCH TASKS (Handles both List and Calendar modes)
   const fetchTasks = async (resetPage = false) => {
     if (!token && !isDemoMode) return;
     setLoading(true);
@@ -570,10 +616,20 @@ export default function App() {
       
       // Build Query Params
       const params = new URLSearchParams();
-      params.append('page', currentPage);
-      params.append('size', pagination.size);
-      params.append('sort_by', sortConfig.key);
-      params.append('sort_desc', sortConfig.direction === 'descending');
+      
+      if (view === 'calendar' && calendarDateRange.start && calendarDateRange.end) {
+          // Calendar Mode: Fetch All for Month
+          params.append('size', 0); // Special flag for all
+          params.append('start_date', calendarDateRange.start);
+          params.append('end_date', calendarDateRange.end);
+      } else {
+          // List Mode: Pagination
+          params.append('page', currentPage);
+          params.append('size', pagination.size);
+          params.append('sort_by', sortConfig.key);
+          params.append('sort_desc', sortConfig.direction === 'descending');
+      }
+
       params.append('show_completed', showCompleted);
       if (searchTerm) params.append('search', searchTerm);
       
@@ -584,7 +640,9 @@ export default function App() {
       if(resTasks.ok) {
           const data = await resTasks.json();
           setTasks(data.items);
-          setPagination(prev => ({ ...prev, total: data.total, pages: data.pages, page: currentPage }));
+          if (view !== 'calendar') {
+             setPagination(prev => ({ ...prev, total: data.total, pages: data.pages, page: currentPage }));
+          }
       }
       
       // Also fetch config/stats if first load
@@ -600,11 +658,15 @@ export default function App() {
   };
   
   // Trigger fetch when these dependencies change
-  useEffect(() => { if(token || isDemoMode) fetchTasks(); }, [token, isDemoMode, pagination.page, pagination.size, sortConfig, showCompleted, filterCats, filterOwners]);
+  useEffect(() => { 
+      if(token || isDemoMode) {
+          fetchTasks(); 
+      }
+  }, [token, isDemoMode, pagination.page, pagination.size, sortConfig, showCompleted, filterCats, filterOwners, view, calendarDateRange]);
   
   // Debounce search
   useEffect(() => { 
-      const timer = setTimeout(() => { if(token || isDemoMode) fetchTasks(true); }, 500);
+      const timer = setTimeout(() => { if((token || isDemoMode) && view === 'list') fetchTasks(true); }, 500);
       return () => clearTimeout(timer);
   }, [searchTerm]);
 
@@ -614,6 +676,22 @@ export default function App() {
           fetchDashboardData();
       }
   }, [view, token, isDemoMode]);
+
+  const handleCalendarDateChange = (dateObj) => {
+      // Calculate start and end of month for fetching
+      const year = dateObj.getFullYear();
+      const month = dateObj.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0);
+      
+      // Format YYYY-MM-DD
+      const formatDate = (d) => d.toISOString().split('T')[0];
+      
+      setCalendarDateRange({
+          start: formatDate(firstDay),
+          end: formatDate(lastDay)
+      });
+  };
 
   // Handle Sort Request
   const requestSort = (key) => {
@@ -664,8 +742,7 @@ export default function App() {
   // Helper CRUD wrappers that refresh data
   const handleAddCategory = async () => { if(!newCatName.trim()) return; try { await authFetch(`/config/categories`, { method: 'POST', body: JSON.stringify({ name: newCatName }) }); fetchConfigAndBdays(); } catch(e) {} setNewCatName(''); };
   const handleDeleteCategory = async (catName) => { if(!confirm(t('confirm_delete'))) return; try { await authFetch(`/config/categories/${encodeURIComponent(catName)}`, { method: 'DELETE' }); fetchConfigAndBdays(); } catch(e) {} };
-  // ... similar for Owner, Birthday, Security Code (omitted for brevity, assume they call fetchConfigAndBdays)
-
+  
   const handleAddOwner = async () => { if(!newOwnerName.trim()) return; try { await authFetch(`/config/owners`, { method: 'POST', body: JSON.stringify({ name: newOwnerName }) }); fetchConfigAndBdays(); } catch(e) {} setNewOwnerName(''); };
   const handleDeleteOwner = async (name) => { if(!confirm(t('confirm_delete'))) return; try { await authFetch(`/config/owners/${encodeURIComponent(name)}`, { method: 'DELETE' }); fetchConfigAndBdays(); } catch(e) {} };
   
@@ -738,10 +815,10 @@ export default function App() {
       </nav>
 
       <div className="flex-grow-1 w-100 overflow-hidden position-relative responsive-height">
-        <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-3" style={{position: 'relative'}}>
+        <div className="position-absolute top-0 start-0 w-100 h-100 overflow-auto custom-scrollbar p-0" style={{position: 'relative', backgroundColor: view === 'calendar' ? '#FDFBF7' : 'inherit'}}>
             {/* KPI CARDS (Uses Dashboard Stats State now) */}
             {view !== 'settings' && view !== 'calendar' && (
-              <div className="row g-2 g-md-3 mb-4">
+              <div className="row g-2 g-md-3 mb-4 px-3 pt-3">
                   <KpiCard title={t('total_tasks')} value={dashboardStats.total} icon={<Briefcase size={22}/>} color="primary" />
                   <KpiCard title={t('completed')} value={dashboardStats.completed} sub={`(${dashboardStats.total > 0 ? Math.round(dashboardStats.completed/dashboardStats.total*100) : 0}%)`} icon={<CheckCircle size={22}/>} color="success" />
                   <KpiCard title={t('pending')} value={dashboardStats.pending} icon={<Clock size={22}/>} color="warning" />
@@ -751,7 +828,7 @@ export default function App() {
 
             {view === 'dashboard' ? (
                 // --- DASHBOARD VIEW ---
-                <div className="row g-4 h-md-100 pb-3">
+                <div className="row g-4 h-md-100 pb-3 px-3">
                     <div className="col-12 col-xl-4 d-flex flex-column gap-3">
                         <div className="card shadow-sm border-0 flex-fill" style={{maxHeight: '400px'}}>
                             <div className="card-header-excel text-danger"><Clock size={16}/> {t('upcoming_tasks')}</div>
@@ -836,7 +913,7 @@ export default function App() {
                 </div>
             ) : view === 'settings' ? (
                 // --- SETTINGS VIEW (Same as before) ---
-                <div className="row g-4">
+                <div className="row g-4 px-3 pt-3">
                     <div className="col-12 col-lg-4">
                         <div className="card shadow-sm border-0 h-100">
                             <div className="card-header-excel text-primary"><List size={16}/> {t('manage_cat')}</div>
@@ -899,10 +976,17 @@ export default function App() {
                 </div>
             ) : view === 'calendar' ? (
                 <div className="h-100">
-                    <CalendarView tasks={tasks} onEditTask={openEditModal} onAddToday={openAddModal} t={t} lang={lang} />
+                    <CalendarView 
+                        tasks={tasks} 
+                        onEditTask={openEditModal} 
+                        onAddToday={openAddModal} 
+                        t={t} 
+                        lang={lang}
+                        onDateChange={handleCalendarDateChange} 
+                    />
                 </div>
             ) : (
-                <div className="card shadow-sm border-0 h-100 d-flex flex-column">
+                <div className="card shadow-sm border-0 h-100 d-flex flex-column m-3">
                     <div className="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div className="d-flex align-items-center gap-3">
                             <h6 className="mb-0 fw-bold text-uppercase text-muted" style={{fontSize: '0.9rem'}}>{t('task_list')}</h6>
