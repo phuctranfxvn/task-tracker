@@ -11,7 +11,7 @@ import {
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v3.4.1 Calendar Update"; // Updated version
+const APP_VERSION = "v3.4.2 Calendar Fit Screen"; // Updated version
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -380,6 +380,10 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
         ? 'repeat(7, minmax(0, 1fr))' 
         : 'repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 0.2fr))';
 
+    // Calculate number of rows needed
+    const totalSlots = startDay + totalDays;
+    const rowsCount = Math.ceil(totalSlots / 7);
+
     const cells = [];
     // Empty slots padding
     for (let i = 0; i < startDay; i++) {
@@ -417,7 +421,8 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
                 className={`calendar-day-card d-flex flex-column gap-1 ${isWeekend ? 'calendar-weekend-stripe' : ''}`}
                 style={{ 
                     backgroundColor: isWeekend ? '#f8f9fa' : '#FFFFFF', // Fallback color
-                    minHeight: '120px', 
+                    minHeight: '0', // Allow shrinking
+                    height: '100%', // Fill grid cell
                     borderRadius: '16px', 
                     padding: '8px',
                     position: 'relative',
@@ -430,7 +435,7 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
                 onDoubleClick={() => onAddToday(dateStr)}
                 onClick={() => onAddToday(dateStr)}
             >
-                <div className={`fw-bold text-center d-flex align-items-center justify-content-center ${isToday ? 'bg-primary text-white rounded-circle shadow-sm' : 'text-secondary'}`} style={{ width: '28px', height: '28px', fontSize: '0.9rem' }}>
+                <div className={`fw-bold text-center d-flex align-items-center justify-content-center ${isToday ? 'bg-primary text-white rounded-circle shadow-sm' : 'text-secondary'}`} style={{ width: '28px', height: '28px', fontSize: '0.9rem', flexShrink: 0 }}>
                     {day}
                 </div>
 
@@ -472,7 +477,7 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
 
     return (
         <div className="h-100 d-flex flex-column" style={{backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif"}}>
-            <div className="px-4 py-4 d-flex justify-content-between align-items-end">
+            <div className="px-4 py-4 d-flex justify-content-between align-items-end flex-shrink-0">
                 <div>
                     <h1 className="display-7 fw-bold text-dark text-uppercase m-0" style={{letterSpacing: '-2px'}}>{monthNames[month]} {year}</h1>
                 </div>
@@ -482,15 +487,17 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
                 </div>
             </div>
             
-            <div className="flex-grow-1 px-4 pb-4 overflow-auto custom-scrollbar">
+            <div className="flex-grow-1 px-4 pb-4 overflow-hidden">
                 {/* UPDATED GRID LAYOUT: 
-                   - No fixed min-width to ensure responsiveness if needed, but min-width helps readability.
-                   - gridTemplateColumns is dynamic based on weekend tasks.
+                   - Fits height of screen using flex-grow and 100% height.
+                   - gridTemplateRows calculates evenly distributed rows.
                 */}
                 <div style={{ 
                     display: 'grid', 
                     gridTemplateColumns: gridTemplate, 
-                    gap: '12px', 
+                    gridTemplateRows: `auto repeat(${rowsCount}, 1fr)`,
+                    height: '100%',
+                    gap: '8px', 
                     minWidth: '100%', // Ensure it takes full width
                     transition: 'grid-template-columns 0.3s ease' // Smooth transition when toggling
                 }}>
