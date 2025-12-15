@@ -8,6 +8,7 @@ export default defineConfig({
       // Add this section
       allowedHosts: [
         'tasks.868686863.xyz',
+        'tasks.tranphuc.site',
         'task-tracker-api.868686863.xyz',
         'localhost' // optional, implicitly allowed usually
       ]
