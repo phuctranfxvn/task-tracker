@@ -433,7 +433,7 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
             <div className="flex-grow-1 px-4 pb-4 overflow-auto custom-scrollbar">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px', minWidth: '900px' }}>
                     {weekDays.map((d, i) => (
-                        <div key={i} className="text-center text-secondary fw-bold mb-2 text-uppercase" style={{fontSize: '0.8rem', letterSpacing: '1px'}}>
+                        <div key={i} className="text-center text-secondary fw-bold mb-2 text-uppercase" style={{fontSize: '1rem', letterSpacing: '1px'}}>
                             {d}
                         </div>
                     ))}
