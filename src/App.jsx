@@ -6,12 +6,12 @@ import {
   Zap, Star, PieChart, Edit, Settings, X, User, Calendar, LogOut, Lock, ArrowRight,
   Eye, EyeOff, Filter, XCircle, Globe, Bold, Italic, Underline, List as ListIcon,
   ArrowUp, ArrowDown, ChevronLeft, ChevronRight, Shield, Key, CheckCheck, MoreVertical,
-  Gift, Search
+  Gift, Search, Grid, Calendar as CalendarIcon
 } from 'lucide-react';
 
 // --- CẤU HÌNH ---
 let API_URL = "http://localhost:8000";
-const APP_VERSION = "v3.4.2 Calendar Fit Screen"; // Updated version
+const APP_VERSION = "v3.5.0 Calendar View Switch"; // Updated version
 
 try {
   if (import.meta && import.meta.env && import.meta.env.VITE_BACKEND_API_URL) {
@@ -129,7 +129,9 @@ const PO_FILES = {
         "turns_age": "Turns {age}",
         "showing_page": "Page {page} of {total}",
         "search_ph": "Search tasks...",
-        "more_tasks": "+{count} more"
+        "more_tasks": "+{count} more",
+        "view_week": "Week",
+        "view_month": "Month"
     },
     vi: {
         "app_name": "Quản Lý Công Việc",
@@ -237,7 +239,9 @@ const PO_FILES = {
         "turns_age": "Sắp {age} tuổi",
         "showing_page": "Trang {page}/{total}",
         "search_ph": "Tìm kiếm công việc...",
-        "more_tasks": "Thêm {count}"
+        "more_tasks": "Thêm {count}",
+        "view_week": "Tuần",
+        "view_month": "Tháng"
     }
 };
 
@@ -310,15 +314,39 @@ const SimpleRichTextEditor = ({ initialValue, onChange }) => {
     );
 };
 
-// --- UPDATED CALENDAR VIEW (Monday Start & Adaptive Weekends) ---
+// --- UPDATED CALENDAR VIEW (Supports Week/Month Toggle) ---
 const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [viewMode, setViewMode] = useState('month'); // 'month' | 'week'
+
+    // Auto-switch to Week view on Mobile
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 768) {
+                if (viewMode !== 'week') setViewMode('week');
+            }
+        };
+        // Initial check
+        if (window.innerWidth < 768) {
+             setViewMode('week');
+        }
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [viewMode]);
 
     useEffect(() => {
         if (onDateChange) {
             onDateChange(currentDate);
         }
     }, [currentDate]);
+
+    // Helper: Get Start of Week (Monday)
+    const getStartOfWeek = (d) => {
+        const date = new Date(d);
+        const day = date.getDay();
+        const diff = date.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+        return new Date(date.setDate(diff));
+    };
 
     const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
     
@@ -330,11 +358,27 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const totalDays = daysInMonth(year, month);
-    const startDay = getFirstDayOfMonthMonStart(year, month);
-
-    const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-    const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+    
+    // Navigation Logic
+    const prev = () => {
+        if (viewMode === 'month') {
+            setCurrentDate(new Date(year, month - 1, 1));
+        } else {
+            const newDate = new Date(currentDate);
+            newDate.setDate(newDate.getDate() - 7);
+            setCurrentDate(newDate);
+        }
+    };
+    
+    const next = () => {
+        if (viewMode === 'month') {
+            setCurrentDate(new Date(year, month + 1, 1));
+        } else {
+            const newDate = new Date(currentDate);
+            newDate.setDate(newDate.getDate() + 7);
+            setCurrentDate(newDate);
+        }
+    };
 
     const weekDays = PO_FILES[lang]?.weekdays || PO_FILES['en'].weekdays;
     const monthNames = PO_FILES[lang]?.month_names || PO_FILES['en'].month_names;
@@ -354,75 +398,82 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
         return PASTEL_COLORS[index];
     };
 
-    // --- CHECK FOR WEEKEND TASKS IN ENTIRE MONTH ---
-    // If any Saturday or Sunday in the current month has a task, we expand columns.
-    // If not, we shrink columns 6 and 7 (indexes 5 and 6).
+    // --- CHECK FOR WEEKEND TASKS ---
+    // In Week view, we check the displayed week. In Month view, checking entire month is okay.
     const hasWeekendTasks = useMemo(() => {
-        // Iterate over all days in the month
-        for (let day = 1; day <= totalDays; day++) {
-            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-            const checkDate = new Date(year, month, day);
-            const dayOfWeek = checkDate.getDay(); // 0=Sun, 6=Sat
-            
-            if (dayOfWeek === 0 || dayOfWeek === 6) {
-                // It is a weekend, check for tasks
-                const hasTask = tasks.some(t => t.due_date === dateStr && t.status !== 'Completed');
-                if (hasTask) return true;
+        if (viewMode === 'month') {
+            const total = daysInMonth(year, month);
+            for (let day = 1; day <= total; day++) {
+                const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const checkDate = new Date(year, month, day);
+                const dayOfWeek = checkDate.getDay(); 
+                if ((dayOfWeek === 0 || dayOfWeek === 6) && tasks.some(t => t.due_date === dateStr && t.status !== 'Completed')) return true;
             }
+        } else {
+             const startOfWeek = getStartOfWeek(currentDate);
+             for(let i=0; i<7; i++) {
+                 const d = new Date(startOfWeek);
+                 d.setDate(startOfWeek.getDate() + i);
+                 const dayOfWeek = d.getDay();
+                 const dateStr = d.toISOString().split('T')[0];
+                 if ((dayOfWeek === 0 || dayOfWeek === 6) && tasks.some(t => t.due_date === dateStr && t.status !== 'Completed')) return true;
+             }
         }
         return false;
-    }, [tasks, year, month, totalDays]);
+    }, [tasks, year, month, viewMode, currentDate]);
 
-    // Grid Template Logic
-    // If hasWeekendTasks is TRUE: equal width for all 7 cols.
-    // If hasWeekendTasks is FALSE: first 5 cols are 1fr, last 2 cols are 0.2fr.
+    // Grid Template
     const gridTemplate = hasWeekendTasks 
         ? 'repeat(7, minmax(0, 1fr))' 
         : 'repeat(5, minmax(0, 1fr)) repeat(2, minmax(0, 0.2fr))';
 
-    // Calculate number of rows needed
-    const totalSlots = startDay + totalDays;
-    const rowsCount = Math.ceil(totalSlots / 7);
-
+    // Generate Cells
     const cells = [];
-    // Empty slots padding
-    for (let i = 0; i < startDay; i++) {
-        // Check if this empty slot is a weekend column to style it (optional, but good for consistency)
-        // Since we fill left-to-right starting Mon, indices 5 and 6 of the row are weekends.
-        // But `i` here is just the empty count. 
-        // It's tricky to style empty slots by column index in a flat loop easily without modulo math.
-        // We'll just leave empty slots plain or calculate column index.
-        const colIndex = i % 7;
-        const isWeekendCol = colIndex === 5 || colIndex === 6;
-        
-        cells.push(
-            <div 
-                key={`empty-${i}`} 
-                className={isWeekendCol ? "calendar-weekend-stripe" : ""}
-                style={{ borderRadius: '16px' }}
-            ></div>
-        );
+    let rowsCount = 0;
+
+    if (viewMode === 'month') {
+        const totalDays = daysInMonth(year, month);
+        const startDay = getFirstDayOfMonthMonStart(year, month);
+        const totalSlots = startDay + totalDays;
+        rowsCount = Math.ceil(totalSlots / 7);
+
+        // Empty slots
+        for (let i = 0; i < startDay; i++) {
+            const colIndex = i % 7;
+            const isWeekendCol = colIndex === 5 || colIndex === 6;
+            cells.push(<div key={`empty-${i}`} className={isWeekendCol ? "calendar-weekend-stripe" : ""} style={{ borderRadius: '16px' }}></div>);
+        }
+        // Month Days
+        for (let day = 1; day <= totalDays; day++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            cells.push(renderDayCell(dateStr, day, startDay + day - 1));
+        }
+    } else {
+        // Week View
+        rowsCount = 1;
+        const startOfWeek = getStartOfWeek(currentDate);
+        for (let i = 0; i < 7; i++) {
+             const d = new Date(startOfWeek);
+             d.setDate(startOfWeek.getDate() + i);
+             const dateStr = d.toISOString().split('T')[0];
+             cells.push(renderDayCell(dateStr, d.getDate(), i));
+        }
     }
-    
-    // Days
-    for (let day = 1; day <= totalDays; day++) {
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
+    function renderDayCell(dateStr, dayNumber, indexForWeekendCheck) {
         const dayTasks = tasks.filter(t => t.due_date === dateStr && t.status !== 'Completed');
         const isToday = new Date().toISOString().split('T')[0] === dateStr;
-        
-        // Calculate Day of Week for Styling
-        // Current logic: (startDay + day - 1) gives 0-based index from Monday.
-        const dayIndex = (startDay + day - 1) % 7; 
-        const isWeekend = dayIndex === 5 || dayIndex === 6; // 5=Sat, 6=Sun
+        const colIndex = indexForWeekendCheck % 7;
+        const isWeekend = colIndex === 5 || colIndex === 6;
 
-        cells.push(
+        return (
             <div 
-                key={day} 
+                key={dateStr} 
                 className={`calendar-day-card d-flex flex-column gap-1 ${isWeekend ? 'calendar-weekend-stripe' : ''}`}
                 style={{ 
-                    backgroundColor: isWeekend ? '#f8f9fa' : '#FFFFFF', // Fallback color
-                    minHeight: '0', // Allow shrinking
-                    height: '100%', // Fill grid cell
+                    backgroundColor: isWeekend ? '#f8f9fa' : '#FFFFFF', 
+                    minHeight: '0', 
+                    height: '100%', 
                     borderRadius: '16px', 
                     padding: '8px',
                     position: 'relative',
@@ -436,12 +487,11 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
                 onClick={() => onAddToday(dateStr)}
             >
                 <div className={`fw-bold text-center d-flex align-items-center justify-content-center ${isToday ? 'bg-primary text-white rounded-circle shadow-sm' : 'text-secondary'}`} style={{ width: '28px', height: '28px', fontSize: '0.9rem', flexShrink: 0 }}>
-                    {day}
+                    {dayNumber}
                 </div>
 
-                {/* Hide tasks if condensed weekend and no tasks (logic handled by parent width, but we can hide content to be safe) */}
                 <div className="d-flex flex-column gap-1 flex-grow-1 overflow-hidden" style={{ opacity: (!hasWeekendTasks && isWeekend) ? 0.5 : 1 }}>
-                    {dayTasks.slice(0, 3).map((task) => {
+                    {dayTasks.slice(0, viewMode === 'week' ? 10 : 3).map((task) => { // Show more items in week view
                         const colors = getTaskColor(task);
                         return (
                             <div 
@@ -465,9 +515,9 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
                         );
                     })}
                     
-                    {dayTasks.length > 3 && (
+                    {dayTasks.length > (viewMode === 'week' ? 10 : 3) && (
                         <div className="text-center text-muted fw-bold" style={{fontSize: '0.7rem'}}>
-                            {t('more_tasks', {count: dayTasks.length - 3})}
+                            {t('more_tasks', {count: dayTasks.length - (viewMode === 'week' ? 10 : 3)})}
                         </div>
                     )}
                 </div>
@@ -475,31 +525,35 @@ const CalendarView = ({ tasks, onEditTask, onAddToday, t, lang, onDateChange }) 
         );
     }
 
+    const titleDate = viewMode === 'month' ? currentDate : getStartOfWeek(currentDate);
+
     return (
         <div className="h-100 d-flex flex-column" style={{backgroundColor: '#FDFBF7', fontFamily: "'Inter', sans-serif"}}>
-            <div className="px-4 py-2 d-flex justify-content-between align-items-end flex-shrink-0">
+            <div className="px-4 py-2 d-flex flex-wrap justify-content-between align-items-end flex-shrink-0 gap-2">
                 <div>
-                    <h1 className="display-7 fw-bold text-dark text-uppercase m-0" style={{letterSpacing: '-2px'}}>{monthNames[month]} / {year}</h1>
+                    <h1 className="display-7 fw-bold text-dark text-uppercase m-0" style={{letterSpacing: '-2px'}}>
+                        {monthNames[titleDate.getMonth()]} / {titleDate.getFullYear()}
+                    </h1>
                 </div>
-                <div className="d-flex gap-2">
-                    <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={prevMonth}><ChevronLeft size={24}/></button>
-                    <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={nextMonth}><ChevronRight size={24}/></button>
+                <div className="d-flex gap-2 align-items-center">
+                    <div className="btn-group me-2" role="group">
+                        <button type="button" className={`btn btn-sm ${viewMode === 'month' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setViewMode('month')}><Grid size={16} className="me-1"/> {t('view_month')}</button>
+                        <button type="button" className={`btn btn-sm ${viewMode === 'week' ? 'btn-dark' : 'btn-outline-dark'}`} onClick={() => setViewMode('week')}><CalendarIcon size={16} className="me-1"/> {t('view_week')}</button>
+                    </div>
+                    <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={prev}><ChevronLeft size={24}/></button>
+                    <button className="btn btn-outline-dark border-0 rounded-circle p-2" onClick={next}><ChevronRight size={24}/></button>
                 </div>
             </div>
             
             <div className="flex-grow-1 px-4 pb-4 overflow-hidden">
-                {/* UPDATED GRID LAYOUT: 
-                   - Fits height of screen using flex-grow and 100% height.
-                   - gridTemplateRows calculates evenly distributed rows.
-                */}
                 <div style={{ 
                     display: 'grid', 
                     gridTemplateColumns: gridTemplate, 
                     gridTemplateRows: `auto repeat(${rowsCount}, 1fr)`,
                     height: '100%',
                     gap: '8px', 
-                    minWidth: '100%', // Ensure it takes full width
-                    transition: 'grid-template-columns 0.3s ease' // Smooth transition when toggling
+                    minWidth: '100%', 
+                    transition: 'all 0.3s ease' 
                 }}>
                     {weekDays.map((d, i) => (
                         <div key={i} className="text-center text-secondary fw-bold mb-2 text-uppercase" style={{fontSize: '1rem', letterSpacing: '1px'}}>
