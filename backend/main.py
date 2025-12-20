@@ -48,6 +48,9 @@ class UserDB(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_admin = Column(Boolean, default=False)
+    full_name = Column(String, nullable=True)
+    location = Column(String, nullable=True)
+    token_version = Column(Integer, default=1)
 
 class CategoryDB(Base):
     __tablename__ = "categories"
@@ -186,13 +189,13 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, version: int = 1, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": expire, "v": version})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -223,6 +226,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        token_version: int = payload.get("v", 1)  # Default to 1 for old tokens
         if username is None:
             raise credentials_exception
     except JWTError:
@@ -230,6 +234,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     user = db.query(UserDB).filter(UserDB.username == username).first()
     if user is None:
         raise credentials_exception
+    
+    # Check token version
+    current_version = user.token_version if user.token_version is not None else 1
+    if token_version != current_version:
+        raise credentials_exception
+        
     return user
 
 # --- HELPERS ---
@@ -280,7 +290,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         if security_code_record.is_used: raise HTTPException(status_code=400, detail="Security code already used")
 
     hashed_password = get_password_hash(user.password)
-    new_user = UserDB(username=user.username, hashed_password=hashed_password, is_admin=is_first_user)
+    new_user = UserDB(username=user.username, hashed_password=hashed_password, is_admin=is_first_user, token_version=1)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -290,7 +300,9 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         security_code_record.used_by_user_id = new_user.id
         db.commit()
     
-    access_token = create_access_token(data={"sub": new_user.username})
+        db.commit()
+    
+    access_token = create_access_token(data={"sub": new_user.username}, version=1)
     return {"access_token": access_token, "token_type": "bearer", "is_admin": new_user.is_admin}
 
 @app.post("/token", response_model=Token)
@@ -299,8 +311,48 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password", headers={"WWW-Authenticate": "Bearer"})
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
+    curr_version = user.token_version if user.token_version is not None else 1
+    access_token = create_access_token(data={"sub": user.username}, version=curr_version, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer", "is_admin": user.is_admin}
+
+# --- PROFILE ENDPOINTS ---
+class UserProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    location: Optional[str] = None
+
+class ChangePassword(BaseModel):
+    old_password: str
+    new_password: str
+
+@app.get("/me")
+async def read_users_me(current_user: UserDB = Depends(get_current_user)):
+    return {
+        "username": current_user.username,
+        "is_admin": current_user.is_admin,
+        "full_name": current_user.full_name,
+        "location": current_user.location
+    }
+
+@app.put("/me")
+async def update_user_profile(profile: UserProfileUpdate, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+    if profile.full_name is not None:
+        current_user.full_name = profile.full_name
+    if profile.location is not None:
+        current_user.location = profile.location
+    db.commit()
+    return {"message": "Profile updated successfully"}
+
+@app.put("/me/password")
+async def change_password(pwd_data: ChangePassword, current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify_password(pwd_data.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Incorrect old password")
+    
+    current_user.hashed_password = get_password_hash(pwd_data.new_password)
+    # Increment token version to invalidate old tokens
+    current_version = current_user.token_version if current_user.token_version is not None else 1
+    current_user.token_version = current_version + 1
+    db.commit()
+    return {"message": "Password changed successfully"}
 
 # 2. SECURITY CODES (Admin Only) (Giữ nguyên)
 @app.get("/config/security-codes", response_model=List[SecurityCodeResponse])

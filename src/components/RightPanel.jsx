@@ -1,7 +1,7 @@
 import React from 'react';
 import { Gift, Clock, Sun, ChevronRight } from 'lucide-react';
 
-const RightPanel = ({ t, upcomingTasks, processedBirthdays, lang, openEditModal }) => {
+const RightPanel = ({ t, upcomingTasks, processedBirthdays, lang, openEditModal, userProfile }) => {
 
     // Helper to format date
     const formatDate = (dateStr) => {
@@ -25,10 +25,18 @@ const RightPanel = ({ t, upcomingTasks, processedBirthdays, lang, openEditModal 
 
     const [weather, setWeather] = React.useState({ temp: '--', city: 'Ho Chi Minh', sub: 'Vietnam', condition: '--', min: '--', max: '--' });
 
+    // Coordinate Mapping
+    const CITY_COORDS = {
+        "Ho Chi Minh": { lat: 10.8231, lon: 106.6297 },
+        "Ha Noi": { lat: 21.0285, lon: 105.8542 },
+        "Da Nang": { lat: 16.0544, lon: 108.2022 },
+        "Can Tho": { lat: 10.0452, lon: 105.7469 }
+    };
+
     React.useEffect(() => {
-        // Coordinates for Ho Chi Minh City
-        const lat = 10.8231;
-        const lon = 106.6297;
+        let locationName = userProfile?.location || 'Ho Chi Minh';
+        const coords = CITY_COORDS[locationName] || CITY_COORDS['Ho Chi Minh'];
+        const { lat, lon } = coords;
 
         fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,is_day,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=Asia%2FBangkok`)
             .then(res => res.json())
@@ -36,7 +44,7 @@ const RightPanel = ({ t, upcomingTasks, processedBirthdays, lang, openEditModal 
                 if (data.current && data.daily) {
                     setWeather({
                         temp: Math.round(data.current.temperature_2m),
-                        city: 'Ho Chi Minh',
+                        city: locationName,
                         sub: 'Vietnam',
                         condition: getWeatherDescription(data.current.weather_code),
                         max: Math.round(data.daily.temperature_2m_max[0]),
@@ -45,7 +53,8 @@ const RightPanel = ({ t, upcomingTasks, processedBirthdays, lang, openEditModal 
                 }
             })
             .catch(err => console.error("Weather fetch error:", err));
-    }, [lang]); // Re-run if language changes for translation
+    }, [lang, userProfile]); // Re-run if userProfile changes
+
 
     return (
         <div className="d-flex flex-column h-100 bg-white p-4 shadow-soft" style={{ width: '300px', borderRadius: '24px 0 0 24px', zIndex: 10 }}>

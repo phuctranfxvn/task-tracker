@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import RightPanel from './components/RightPanel';
+import ProfileModal from './components/ProfileModal';
 import bgBlueClouds from './assets/bg_blue_clouds_v2_1766206629794.png';
 import bgGreenNature from './assets/bg_green_nature_v2_1766206645278.png';
 import bgOrangeSun from './assets/bg_orange_sun_v2_1766206767841.png';
@@ -146,7 +147,21 @@ const PO_FILES = {
         "weather_rain_showers": "Rain Showers",
         "weather_thunderstorm": "Thunderstorm",
         "weather_unknown": "Unknown",
-        "weather_forecast": "Forecast"
+        "weather_forecast": "Forecast",
+        "profile_settings": "Profile Settings",
+        "personal_info": "Personal Info",
+        "change_password": "Change Password",
+        "lbl_fullname": "Full Name",
+        "lbl_location": "Location",
+        "location_hint": "Location used for weather forecast",
+        "save_changes": "Save Changes",
+        "update_success": "Profile updated successfully!",
+        "old_password": "Current Password",
+        "new_password": "New Password",
+        "confirm_password": "Confirm Password",
+        "update_password": "Update Password",
+        "password_changed": "Password changed successfully!",
+        "pass_mismatch": "Passwords do not match!"
     },
     vi: {
         "app_name": "Quản Lý Công Việc",
@@ -265,7 +280,21 @@ const PO_FILES = {
         "weather_rain_showers": "Mưa rào",
         "weather_thunderstorm": "Dông bão",
         "weather_unknown": "Không xác định",
-        "weather_forecast": "Dự báo"
+        "weather_forecast": "Dự báo",
+        "profile_settings": "Cài đặt tài khoản",
+        "personal_info": "Thông tin cá nhân",
+        "change_password": "Đổi mật khẩu",
+        "lbl_fullname": "Họ và tên",
+        "lbl_location": "Khu vực",
+        "location_hint": "Khu vực hiển thị dự báo thời tiết",
+        "save_changes": "Lưu thay đổi",
+        "update_success": "Cập nhật hồ sơ thành công!",
+        "old_password": "Mật khẩu hiện tại",
+        "new_password": "Mật khẩu mới",
+        "confirm_password": "Xác nhận mật khẩu",
+        "update_password": "Cập nhật mật khẩu",
+        "password_changed": "Đổi mật khẩu thành công!",
+        "pass_mismatch": "Mật khẩu xác nhận không khớp!"
     }
 };
 
@@ -659,6 +688,7 @@ export default function App() {
     const { t, lang, setLang } = useTranslation();
     const [token, setToken] = useState(localStorage.getItem('access_token'));
     const [isAdmin, setIsAdmin] = useState(localStorage.getItem('is_admin') === 'true');
+    const [userProfile, setUserProfile] = useState(null);
 
 
     // --- STATE ---
@@ -679,6 +709,7 @@ export default function App() {
     const [filterCats, setFilterCats] = useState([]);
     const [filterOwners, setFilterOwners] = useState([]);
     const [showFilters, setShowFilters] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     const [sortConfig, setSortConfig] = useState({ key: 'created_at', direction: 'descending' });
@@ -727,6 +758,7 @@ export default function App() {
         setIsAdmin(false);
 
         setTasks([]);
+        setUserProfile(null);
         setBirthdays([]);
         setCategories([]);
         setOwners([]);
@@ -752,6 +784,9 @@ export default function App() {
                 const resCodes = await authFetch('/config/security-codes');
                 if (resCodes.ok) setSecurityCodes(await resCodes.json());
             }
+            // Fetch Profile
+            const resProfile = await authFetch('/me');
+            if (resProfile.ok) setUserProfile(await resProfile.json());
         } catch (e) { }
     };
 
@@ -959,6 +994,8 @@ export default function App() {
                     logout={logout}
 
                     openAddModal={() => openAddModal()}
+                    openProfile={() => setShowProfileModal(true)}
+                    userProfile={userProfile}
                 />
             </div>
 
@@ -1200,6 +1237,7 @@ export default function App() {
                             processedBirthdays={processedBirthdays}
                             lang={lang}
                             openEditModal={openEditModal}
+                            userProfile={userProfile}
                         />
                     </div>
                 )
@@ -1207,7 +1245,18 @@ export default function App() {
 
             {/* MODAL */}
             {showModal && (<><div className="modal-backdrop fade show" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9998, backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowModal(false)}></div><div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, overflowY: 'auto' }}><div className="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered" role="document"><div className="modal-content shadow-lg border-0"><div className="modal-header py-3 bg-white border-bottom-0"><h5 className="modal-title fw-bold text-primary">{editingId ? t('modal_edit_title') : t('modal_add_title')}</h5><button type="button" className="btn-close" onClick={() => setShowModal(false)} aria-label="Close"></button></div><div className="modal-body p-3 p-md-4"><div className="row g-4"><div className="col-12 col-lg-5"><div className="mb-3"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_desc')}</label><input type="text" className="form-control form-control-lg border-light bg-light" value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} autoFocus placeholder={t('ph_desc')} /></div><div className="row g-3 mb-3"><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_cat')}</label><select className="form-select border-light bg-light" value={newTask.category_name} onChange={e => setNewTask({ ...newTask, category_name: e.target.value })}><option value="">{t('sel_cat')}</option>{categories.map((c, i) => <option key={i} value={c}>{c}</option>)}</select></div><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_owner')}</label><select className="form-select border-light bg-light" value={newTask.owner_name} onChange={e => setNewTask({ ...newTask, owner_name: e.target.value })}><option value="">{t('sel_owner')}</option>{owners.map((o, i) => <option key={i} value={o}>{o}</option>)}</select></div></div><div className="row g-3 mb-3"><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_prio')}</label><select className="form-select border-light bg-light" value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value })}><option value="High">High</option> <option value="Normal">Normal</option> <option value="Low">Low</option></select></div><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_status')}</label><select className="form-select border-light bg-light" value={newTask.status} onChange={e => setNewTask({ ...newTask, status: e.target.value })}>{Object.keys(STATUS_BADGES).map(s => <option key={s} value={s}>{s}</option>)}</select></div></div><div className="mb-3"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_due')}</label><input type="date" className="form-control border-light bg-light" value={newTask.due_date} onChange={e => setNewTask({ ...newTask, due_date: e.target.value })} /></div><div className="d-flex flex-column gap-2 p-3 bg-light rounded-3 border border-light"><div className="form-check form-switch"><input className="form-check-input" type="checkbox" id="chkImp" checked={newTask.is_important} onChange={e => setNewTask({ ...newTask, is_important: e.target.checked })} /> <label className="form-check-label fw-bold ms-2" htmlFor="chkImp">{t('chk_imp')}</label></div><div className="form-check form-switch"><input className="form-check-input" type="checkbox" id="chkUrg" checked={newTask.is_urgent} onChange={e => setNewTask({ ...newTask, is_urgent: e.target.checked })} /> <label className="form-check-label fw-bold ms-2" htmlFor="chkUrg">{t('chk_urg')}</label></div></div></div><div className="col-12 col-lg-7 d-flex flex-column"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_details')}</label><div className="flex-grow-1"><SimpleRichTextEditor initialValue={newTask.notes} onChange={(html) => setNewTask(prev => ({ ...prev, notes: html }))} /></div></div></div></div><div className="modal-footer py-3 border-top-0 bg-white sticky-bottom"><button className="btn btn-light px-4 text-secondary fw-bold" onClick={() => setShowModal(false)}>{t('cancel')}</button><button className="btn btn-primary px-4 fw-bold" onClick={handleSaveTask}>{editingId ? t('update') : t('save')}</button></div></div></div></div></>)}
-        </div >
+            {/* PROFILE MODAL */}
+            <ProfileModal
+                show={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+                t={t}
+                authFetch={authFetch}
+                userProfile={userProfile}
+                onUpdateProfile={setUserProfile}
+                lang={lang}
+                logout={logout}
+            />
+        </div>
     );
 
 }
