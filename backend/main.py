@@ -140,6 +140,11 @@ class PaginatedTaskResponse(BaseModel):
     pages: int
 
 # NEW: Dashboard Stats Model
+class CategoryStat(BaseModel):
+    name: str
+    total: int
+    completed: int
+
 class DashboardStats(BaseModel):
     total: int
     completed: int
@@ -147,6 +152,7 @@ class DashboardStats(BaseModel):
     overdue: int
     urgent: int
     important: int
+    category_stats: List[CategoryStat]
 
 class ConfigItem(BaseModel):
     name: str
@@ -342,8 +348,18 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserDB = De
     # Overdue: status != Completed AND due_date < today
     overdue = query.filter(TaskDB.status != 'Completed', TaskDB.due_date < date.today()).count()
     
-    urgent = query.filter(TaskDB.status != 'Completed', TaskDB.is_urgent == True).count()
+    # Urgent: is_urgent OR priority == 'High'
+    urgent = query.filter(TaskDB.status != 'Completed', or_(TaskDB.is_urgent == True, TaskDB.priority == 'High')).count()
     important = query.filter(TaskDB.status != 'Completed', TaskDB.is_important == True).count()
+    
+    # Category Stats
+    cats = db.query(CategoryDB).filter(CategoryDB.user_id == current_user.id).all()
+    cat_stats = []
+    for c in cats:
+        c_tasks = db.query(TaskDB).filter(TaskDB.category_id == c.id).all()
+        c_total = len(c_tasks)
+        c_done = len([t for t in c_tasks if t.status == 'Completed'])
+        cat_stats.append({"name": c.name, "total": c_total, "completed": c_done})
     
     return {
         "total": total,
@@ -351,7 +367,8 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: UserDB = De
         "pending": pending,
         "overdue": overdue,
         "urgent": urgent,
-        "important": important
+        "important": important,
+        "category_stats": cat_stats
     }
 
 # UPDATED: Pagination, Filtering & Sorting
