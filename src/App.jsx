@@ -340,7 +340,7 @@ const getDaysRemaining = (dueDate, t) => {
 };
 
 // --- RICH TEXT EDITOR COMPONENT ---
-const SimpleRichTextEditor = ({ initialValue, onChange }) => {
+const SimpleRichTextEditor = ({ initialValue, onChange, style }) => {
     const contentRef = useRef(null);
     useEffect(() => {
         if (contentRef.current && (contentRef.current.innerHTML === '' || initialValue !== contentRef.current.innerHTML)) {
@@ -354,7 +354,7 @@ const SimpleRichTextEditor = ({ initialValue, onChange }) => {
     const handleInput = () => { if (contentRef.current) onChange(contentRef.current.innerHTML); };
     const exec = (cmd) => { document.execCommand(cmd, false, null); if (contentRef.current) contentRef.current.focus(); };
     return (
-        <div className="border rounded bg-white overflow-hidden d-flex flex-column" style={{ height: '250px' }}>
+        <div className="border rounded bg-white overflow-hidden d-flex flex-column" style={style || { height: '250px' }}>
             <div className="bg-light border-bottom p-2 d-flex gap-2 align-items-center flex-wrap">
                 <button type="button" className="btn btn-sm btn-light border" onClick={(e) => { e.preventDefault(); exec('bold'); }} title="Bold"><Bold size={16} /></button>
                 <button type="button" className="btn btn-sm btn-light border" onClick={(e) => { e.preventDefault(); exec('italic'); }} title="Italic"><Italic size={16} /></button>
@@ -1040,69 +1040,64 @@ export default function App() {
                     {/* VIEWS */}
                     {view === 'dashboard' ? (
                         <div className="row g-4 pb-3">
-                            {/* Stats Charts */}
-                            <div className="col-12 col-md-8 d-flex flex-column gap-4">
-                                {/* Charts Row */}
-                                <div className="row g-4 h-100">
-                                    <div className="col-12 col-lg-6">
-                                        <div className="card-custom h-100">
-                                            <h6 className="fw-bold mb-3">{t('status_by_cat')}</h6>
-                                            <div className="d-flex flex-column gap-3">
-                                                {dashboardStats.category_stats && dashboardStats.category_stats.map(stat => {
-                                                    const total = stat.total;
-                                                    const percentage = total > 0 ? Math.round(stat.completed / total * 100) : 0;
-                                                    return (
-                                                        <div key={stat.name}>
-                                                            <div className="d-flex justify-content-between small mb-1">
-                                                                <span className="fw-bold">{stat.name}</span>
-                                                                <span className="text-muted">{percentage}%</span>
-                                                            </div>
-                                                            <div className="progress" style={{ height: '8px', borderRadius: '4px', backgroundColor: '#f0f0f0' }}>
-                                                                <div className="progress-bar bg-primary" style={{ width: `${percentage}%`, borderRadius: '4px' }}></div>
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                })}
-                                                {(!dashboardStats.category_stats || dashboardStats.category_stats.length === 0) && (
-                                                    <div className="text-center text-muted small py-3">{t('no_tasks')}</div>
-                                                )}
-                                            </div>
+                            {/* 3-Column Layout: Urgent | Status | Birthdays */}
+                            <div className="col-12 col-lg-4">
+                                <div className="card-custom">
+                                    <div className="d-flex justify-content-between align-items-start">
+                                        <h6 className="fw-bold">{t('urgent_tasks')}</h6>
+                                        <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1 small">High Priority</span>
+                                    </div>
+                                    <div className="d-flex align-items-center gap-4 my-3">
+                                        <SimplePieChart total={dashboardStats.total - dashboardStats.completed} value={dashboardStats.urgent} color="#dc3545" bg="#ffe6e6" />
+                                        <div>
+                                            <div className="display-4 fw-bold text-dark">{dashboardStats.urgent}</div>
+                                            <div className="text-muted small">Tasks require attention</div>
                                         </div>
                                     </div>
-                                    <div className="col-12 col-lg-6">
-                                        <div className="card-custom h-100 d-flex flex-column justify-content-between">
-                                            <div className="d-flex justify-content-between align-items-start">
-                                                <h6 className="fw-bold">{t('urgent_tasks')}</h6>
-                                                <span className="badge bg-danger bg-opacity-10 text-danger rounded-pill px-2 py-1 small">High Priority</span>
-                                            </div>
-                                            <div className="d-flex align-items-center gap-4 my-3">
-                                                <SimplePieChart total={dashboardStats.total - dashboardStats.completed} value={dashboardStats.urgent} color="#dc3545" bg="#ffe6e6" />
-                                                <div>
-                                                    <div className="display-4 fw-bold text-dark">{dashboardStats.urgent}</div>
-                                                    <div className="text-muted small">Tasks require attention</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                </div>
+                            </div>
 
-                                    {/* UPCOMING BIRTHDAYS */}
-                                    <div className="col-12">
-                                        <div className="card-custom">
-                                            <h6 className="fw-bold mb-3 d-flex align-items-center gap-2"><Gift size={18} className="text-info" /> {t('upcoming_birthdays')}</h6>
-                                            <div className="d-flex flex-wrap gap-3">
-                                                {processedBirthdays.length === 0 ? <div className="text-muted fst-italic small w-100">{t('no_upcoming_bday')}</div> :
-                                                    processedBirthdays.slice(0, 4).map(bday => (
-                                                        <div key={bday.id} className="d-flex align-items-center gap-2 bg-light rounded-pill pe-3 p-1 border">
-                                                            <div className="bg-white rounded-circle d-flex align-items-center justify-content-center shadow-sm text-info" style={{ width: '32px', height: '32px' }}><Gift size={14} /></div>
-                                                            <div>
-                                                                <div className="fw-bold text-dark small">{bday.name}</div>
-                                                                <div className="text-muted extra-small" style={{ fontSize: '0.7rem' }}>{bday.day}/{bday.month} • {bday.diffDays === 0 ? t('today') : t('days_left', { days: bday.diffDays })}</div>
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                }
-                                            </div>
-                                        </div>
+                            <div className="col-12 col-lg-4">
+                                <div className="card-custom h-100">
+                                    <h6 className="fw-bold mb-3">{t('status_by_cat')}</h6>
+                                    <div className="d-flex flex-column gap-3 custom-scrollbar" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                        {dashboardStats.category_stats && dashboardStats.category_stats.map(stat => {
+                                            const total = stat.total;
+                                            const percentage = total > 0 ? Math.round(stat.completed / total * 100) : 0;
+                                            return (
+                                                <div key={stat.name}>
+                                                    <div className="d-flex justify-content-between small mb-1">
+                                                        <span className="fw-bold">{stat.name}</span>
+                                                        <span className="text-muted">{percentage}%</span>
+                                                    </div>
+                                                    <div className="progress" style={{ height: '8px', borderRadius: '4px', backgroundColor: '#f0f0f0' }}>
+                                                        <div className="progress-bar bg-primary" style={{ width: `${percentage}%`, borderRadius: '4px' }}></div>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
+                                        {(!dashboardStats.category_stats || dashboardStats.category_stats.length === 0) && (
+                                            <div className="text-center text-muted small py-3">{t('no_tasks')}</div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="col-12 col-lg-4">
+                                <div className="card-custom h-100">
+                                    <h6 className="fw-bold mb-3 d-flex align-items-center gap-2"><Gift size={18} className="text-info" /> {t('upcoming_birthdays')}</h6>
+                                    <div className="d-flex flex-column gap-3">
+                                        {processedBirthdays.length === 0 ? <div className="text-muted fst-italic small w-100">{t('no_upcoming_bday')}</div> :
+                                            processedBirthdays.slice(0, 4).map(bday => (
+                                                <div key={bday.id} className="d-flex align-items-center gap-2 bg-light rounded-pill pe-3 p-1 border">
+                                                    <div className="bg-white rounded-circle d-flex align-items-center justify-content-center shadow-sm text-info" style={{ width: '32px', height: '32px' }}><Gift size={14} /></div>
+                                                    <div>
+                                                        <div className="fw-bold text-dark small">{bday.name}</div>
+                                                        <div className="text-muted extra-small" style={{ fontSize: '0.7rem' }}>{bday.day}/{bday.month} • {bday.diffDays === 0 ? t('today') : t('days_left', { days: bday.diffDays })}</div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        }
                                     </div>
                                 </div>
                             </div>
@@ -1244,7 +1239,7 @@ export default function App() {
             }
 
             {/* MODAL */}
-            {showModal && (<><div className="modal-backdrop fade show" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9998, backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowModal(false)}></div><div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, overflowY: 'auto' }}><div className="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered" role="document"><div className="modal-content shadow-lg border-0"><div className="modal-header py-3 bg-white border-bottom-0"><h5 className="modal-title fw-bold text-primary">{editingId ? t('modal_edit_title') : t('modal_add_title')}</h5><button type="button" className="btn-close" onClick={() => setShowModal(false)} aria-label="Close"></button></div><div className="modal-body p-3 p-md-4"><div className="row g-4"><div className="col-12 col-lg-5"><div className="mb-3"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_desc')}</label><input type="text" className="form-control form-control-lg border-light bg-light" value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} autoFocus placeholder={t('ph_desc')} /></div><div className="row g-3 mb-3"><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_cat')}</label><select className="form-select border-light bg-light" value={newTask.category_name} onChange={e => setNewTask({ ...newTask, category_name: e.target.value })}><option value="">{t('sel_cat')}</option>{categories.map((c, i) => <option key={i} value={c}>{c}</option>)}</select></div><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_owner')}</label><select className="form-select border-light bg-light" value={newTask.owner_name} onChange={e => setNewTask({ ...newTask, owner_name: e.target.value })}><option value="">{t('sel_owner')}</option>{owners.map((o, i) => <option key={i} value={o}>{o}</option>)}</select></div></div><div className="row g-3 mb-3"><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_prio')}</label><select className="form-select border-light bg-light" value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value })}><option value="High">High</option> <option value="Normal">Normal</option> <option value="Low">Low</option></select></div><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_status')}</label><select className="form-select border-light bg-light" value={newTask.status} onChange={e => setNewTask({ ...newTask, status: e.target.value })}>{Object.keys(STATUS_BADGES).map(s => <option key={s} value={s}>{s}</option>)}</select></div></div><div className="mb-3"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_due')}</label><input type="date" className="form-control border-light bg-light" value={newTask.due_date} onChange={e => setNewTask({ ...newTask, due_date: e.target.value })} /></div><div className="d-flex flex-column gap-2 p-3 bg-light rounded-3 border border-light"><div className="form-check form-switch"><input className="form-check-input" type="checkbox" id="chkImp" checked={newTask.is_important} onChange={e => setNewTask({ ...newTask, is_important: e.target.checked })} /> <label className="form-check-label fw-bold ms-2" htmlFor="chkImp">{t('chk_imp')}</label></div><div className="form-check form-switch"><input className="form-check-input" type="checkbox" id="chkUrg" checked={newTask.is_urgent} onChange={e => setNewTask({ ...newTask, is_urgent: e.target.checked })} /> <label className="form-check-label fw-bold ms-2" htmlFor="chkUrg">{t('chk_urg')}</label></div></div></div><div className="col-12 col-lg-7 d-flex flex-column"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_details')}</label><div className="flex-grow-1"><SimpleRichTextEditor initialValue={newTask.notes} onChange={(html) => setNewTask(prev => ({ ...prev, notes: html }))} /></div></div></div></div><div className="modal-footer py-3 border-top-0 bg-white sticky-bottom"><button className="btn btn-light px-4 text-secondary fw-bold" onClick={() => setShowModal(false)}>{t('cancel')}</button><button className="btn btn-primary px-4 fw-bold" onClick={handleSaveTask}>{editingId ? t('update') : t('save')}</button></div></div></div></div></>)}
+            {showModal && (<><div className="modal-backdrop fade show" style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 9998, backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowModal(false)}></div><div className="modal fade show d-block" tabIndex="-1" role="dialog" style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 9999, overflowY: 'auto' }}><div className="modal-dialog modal-xl modal-fullscreen-md-down modal-dialog-centered" role="document"><div className="modal-content shadow-lg border-0"><div className="modal-header py-3 bg-white border-bottom-0"><h5 className="modal-title fw-bold text-primary">{editingId ? t('modal_edit_title') : t('modal_add_title')}</h5><button type="button" className="btn-close" onClick={() => setShowModal(false)} aria-label="Close"></button></div><div className="modal-body p-3 p-md-4"><div className="row g-4"><div className="col-12 col-lg-5"><div className="mb-3"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_desc')}</label><input type="text" className="form-control form-control-lg border-light bg-light" value={newTask.description} onChange={e => setNewTask({ ...newTask, description: e.target.value })} autoFocus placeholder={t('ph_desc')} /></div><div className="row g-3 mb-3"><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_cat')}</label><select className="form-select border-light bg-light" value={newTask.category_name} onChange={e => setNewTask({ ...newTask, category_name: e.target.value })}><option value="">{t('sel_cat')}</option>{categories.map((c, i) => <option key={i} value={c}>{c}</option>)}</select></div><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_owner')}</label><select className="form-select border-light bg-light" value={newTask.owner_name} onChange={e => setNewTask({ ...newTask, owner_name: e.target.value })}><option value="">{t('sel_owner')}</option>{owners.map((o, i) => <option key={i} value={o}>{o}</option>)}</select></div></div><div className="row g-3 mb-3"><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_prio')}</label><select className="form-select border-light bg-light" value={newTask.priority} onChange={e => setNewTask({ ...newTask, priority: e.target.value })}><option value="High">High</option> <option value="Normal">Normal</option> <option value="Low">Low</option></select></div><div className="col-6"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_status')}</label><select className="form-select border-light bg-light" value={newTask.status} onChange={e => setNewTask({ ...newTask, status: e.target.value })}>{Object.keys(STATUS_BADGES).map(s => <option key={s} value={s}>{s}</option>)}</select></div></div><div className="mb-3"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_due')}</label><input type="date" className="form-control border-light bg-light" value={newTask.due_date} onChange={e => setNewTask({ ...newTask, due_date: e.target.value })} /></div><div className="d-flex flex-column gap-2 p-3 bg-light rounded-3 border border-light"><div className="form-check form-switch"><input className="form-check-input" type="checkbox" id="chkImp" checked={newTask.is_important} onChange={e => setNewTask({ ...newTask, is_important: e.target.checked })} /> <label className="form-check-label fw-bold ms-2" htmlFor="chkImp">{t('chk_imp')}</label></div><div className="form-check form-switch"><input className="form-check-input" type="checkbox" id="chkUrg" checked={newTask.is_urgent} onChange={e => setNewTask({ ...newTask, is_urgent: e.target.checked })} /> <label className="form-check-label fw-bold ms-2" htmlFor="chkUrg">{t('chk_urg')}</label></div></div></div><div className="col-12 col-lg-7 d-flex flex-column"><label className="form-label fw-bold text-secondary text-uppercase small">{t('lbl_details')}</label><div className="flex-grow-1"><SimpleRichTextEditor initialValue={newTask.notes} onChange={(html) => setNewTask(prev => ({ ...prev, notes: html }))} style={{ height: '100%' }} /></div></div></div></div><div className="modal-footer py-3 border-top-0 bg-white sticky-bottom"><button className="btn btn-light px-4 text-secondary fw-bold" onClick={() => setShowModal(false)}>{t('cancel')}</button><button className="btn btn-primary px-4 fw-bold" onClick={handleSaveTask}>{editingId ? t('update') : t('save')}</button></div></div></div></div></>)}
             {/* PROFILE MODAL */}
             <ProfileModal
                 show={showProfileModal}
