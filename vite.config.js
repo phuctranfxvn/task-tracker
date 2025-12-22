@@ -5,12 +5,11 @@ import react from '@vitejs/plugin-react-swc'
 export default defineConfig({
   plugins: [react()],
   server: {
-      // Add this section
-      allowedHosts: [
-        'tasks.868686863.xyz',
-        'tasks.tranphuc.site',
-        'task-tracker-api.868686863.xyz',
-        'localhost' // optional, implicitly allowed usually
-      ]
-    }
+    // Add this section
+    allowedHosts: [
+      'tasks.tranphuc.site',
+      'task-tracker-api.tranphuc.site',
+      'localhost' // optional, implicitly allowed usually
+    ]
+  }
 })
